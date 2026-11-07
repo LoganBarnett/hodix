@@ -35,8 +35,12 @@
         host = ./agnostic-modules/host.nix;
       };
       agnosticProfiles = {
+        hostname-convention-bean =
+          ./agnostic-profiles/hostname-convention-bean.nix;
         hostname-convention-periodic-table =
           ./agnostic-profiles/hostname-convention-periodic-table.nix;
+        hostname-convention-petal =
+          ./agnostic-profiles/hostname-convention-petal.nix;
         hostname-convention-wood =
           ./agnostic-profiles/hostname-convention-wood.nix;
       };
