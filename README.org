@@ -16,9 +16,13 @@ The name is short for hodos-nix.  "Hodos" is the Greek root for a way or a road.
 - hodon :: A network that runs hodix.  Every hodon has a name.  One example is
   ~proton~.
 - hodocule :: A network of hodons.  The [[*Roadmap][Roadmap]] says how hodons will join one.
+- federated hodon :: A hodon in the same hodocule.  Both owners agree to it and
+  both networks take part.
+- visited hodon :: A venue one device uses while standing on it.  Home takes no
+  part.
 - hostname convention :: A themed pool of host names for a hodon to draw from.
   Nobody has to invent memorable names.  The periodic table is one convention.
-  Kinds of wood is another.
+  Kinds of wood, petaled flowers, and beans are others.
 
 * Layout
 
@@ -65,6 +69,11 @@ A hodon's facts are an ordinary module.
     };
   }
 #+end_src
+
+An interface's name is a label and not the operating system's device name.  It
+names the network the interface attaches to, so ~interfaces.main~ is the host's
+attachment to ~networks.main~.  Set ~network~ on the interface when the two
+names must differ.
 
 ** Using the facts
 
@@ -142,10 +151,22 @@ Importing a convention's profile selects it.
 }
 #+end_src
 
-~hodon.hostnames.available~ then lists the names no host has taken.
+~hodon.hostnames.available~ then lists the names no host has taken.  Names are
+handed out in pool order.  A pool lists its shortest names first and breaks ties
+alphabetically, unless its theme carries an order of its own.  The periodic
+table follows atomic number.
 
 A convention is offered and not enforced.  Devices the hodon does not build keep
 whatever names they have.
+
+A hodon's own name sits one level beneath its convention.  It names something
+the pool entries have in common and is never a pool entry itself, so no host can
+take it.  Each convention suggests one.
+
+1. ~periodic-table~ suggests ~proton~.  Every element is made of them.
+2. ~wood~ suggests ~heartwood~.  A trunk has it at the core.
+3. ~petal~ suggests ~nectar~.  Flowers offer it to their visitors.
+4. ~bean~ suggests ~pod~.  Beans grow in one, and the hosts are the beans.
 
 A custom convention sets ~hodon.hostnames.convention~ and ~hodon.hostnames.pool~
 directly.

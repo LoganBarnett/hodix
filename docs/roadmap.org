@@ -16,6 +16,31 @@ Any hodon can federate with another.  The owners of both hodons exchange a
 handshake.  Each owner states which permissions and resources the other hodon is
 granted.  Either party can end the grants or the connection itself at any time.
 
+Hodon names are unique within a hodocule and nowhere wider.  A bridge resolves a
+peer's names to one peer, so the federation facts reject a peer whose name
+collides with home or with another peer.
+
+** Federated and visited hodons
+
+A hodon relates to another hodon in one of two ways.
+
+A federated hodon is a member of the same hodocule.  The relationship is between
+two hodons and both owners agree to it.  It lives in the facts of both.  Home
+runs a WireGuard link to the peer, a bridge for the peer's names, and DNS that
+sends the peer's names to that bridge.  Devices gain the peer's names in their
+tunnel domain list and nothing else.  Only a device that roams onto the peer
+trusts its root, and then only for the peer's subtree.
+
+A visited hodon is a venue.  The relationship is between one device and the
+venue, and home is not a party to it.  Nothing about the venue enters home's
+facts or home's network.  The device installs a constrained anchor for the
+venue's root and resolves the venue's names locally while standing there.  What
+a venue offers guests, and on which network, is a fact of the venue.  Home
+grants nothing and learns nothing.
+
+Both relationships use the same device-side trust.  They differ in whether
+home's network takes part.
+
 ** Connection
 
 Two federated hodons connect to each other over WireGuard.  The link is peer to
@@ -25,19 +50,47 @@ want.
 
 ** Reaching a service on another hodon
 
-A hodocule gains a hodon without any device trusting a new certificate.
+A hodocule gains a hodon without any device trusting a new certificate.  A
+device that roams onto the new hodon is the exception.  [[*Roaming][Roaming]] bounds what it
+trusts.
 
 Each hodon's root certificate covers every name under ~hodon.internal~.  It is
 not limited to the hodon's own domain.  Each hodon also runs an nginx instance.
 That instance translates TLS with its twin on the other hodon.
 
-Take a client on ~proton~ that wants ~nextcloud.wood.hodon.internal~.  The hodon
-~wood~ is federated with ~proton~.
+Take a client on ~proton~ that wants ~nextcloud.heartwood.hodon.internal~.  The
+hodon ~heartwood~ is federated with ~proton~.
 
 1. The client's DNS resolves the name to the nginx instance on ~proton~.
 2. That nginx answers under the root certificate of ~proton~.  Every client
    device on ~proton~ already trusts it.
-3. It re-encrypts the request under the TLS of ~wood~.  The request then crosses
-   the WireGuard interface.
-4. The nginx instance on ~wood~ forwards the request to the Nextcloud instance
-   in ~wood~.
+3. It re-encrypts the request under the TLS of ~heartwood~.  The request then
+   crosses the WireGuard interface.
+4. The nginx instance on ~heartwood~ forwards the request to the Nextcloud
+   instance in ~heartwood~.
+
+** Roaming
+
+A device belongs to one hodon.  That hodon is its home.  Away from home, the
+device reaches home's names and every federated peer's names through a split
+tunnel to home.  The home bridge is the only middle box that ever sees the
+device's credentials.  The namespace is shared, so home claims only what home
+can answer.  Names of any other hodon resolve on the network the device is
+standing on.
+
+The price is a boomerang.  A device standing on a federated hodon reaches that
+hodon's own services by way of home.  A later client module may route that
+hodon's names locally while the device stands on it.  The DHCP domain is hint
+enough.  Trust is TLS's job, so a false claim buys the claimant nothing but a
+denial of service it already had.  Home's own names never leave the tunnel.
+
+Trust is asymmetric.  A device trusts its home root for all of ~hodon.internal~.
+It trusts any other hodon's root for that hodon's own subtree only.  The device
+re-signs the foreign CA key under a name constraint and installs the result as
+the anchor.  Validators do not check the signature on an anchor, so no other
+party signs anything.  A foreign bridge then cannot present a home name to the
+device, so home credentials never transit a foreign bridge.
+
+A hodon with no relationship to home is reachable and untrusted.  Its names
+resolve locally and its certificates fail validation until the device visits it.
+Every hodon service speaks TLS so that failure is the whole story.

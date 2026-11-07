@@ -1,0 +1,52 @@
+# The pool is kinds of beans, shortest first and then alphabetical.  Each name
+# drops the word bean.
+{
+  hodon.hostnames = {
+    convention = "bean";
+    pool = [
+      "red"
+      "soy"
+      "wax"
+      "fava"
+      "jack"
+      "lima"
+      "moth"
+      "mung"
+      "navy"
+      "pink"
+      "rice"
+      "black"
+      "broad"
+      "cocoa"
+      "green"
+      "jelly"
+      "magic"
+      "pinto"
+      "sword"
+      "white"
+      "adzuki"
+      "butter"
+      "castor"
+      "coffee"
+      "kidney"
+      "runner"
+      "string"
+      "tepary"
+      "velvet"
+      "winged"
+      "yellow"
+      "anasazi"
+      "calypso"
+      "haricot"
+      "scarlet"
+      "vanilla"
+      "borlotti"
+      "garbanzo"
+      "yardlong"
+      "appaloosa"
+      "cranberry"
+      "flageolet"
+      "cannellini"
+    ];
+  };
+}

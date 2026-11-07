@@ -2,7 +2,9 @@
 let
   inherit (hodix.lib) mkHodon;
   inherit (hodix.agnosticProfiles)
+    hostname-convention-bean
     hostname-convention-periodic-table
+    hostname-convention-petal
     hostname-convention-wood
     ;
 
@@ -31,6 +33,10 @@ let
   rejects = value: !(builtins.tryEval (builtins.deepSeq value value)).success;
   bare = module: (mkHodon { modules = [ module ]; }).hodon;
   hostnamesWith = convention: (hodonOf { imports = [ convention ]; }).hostnames;
+  shorterOrEarlier =
+    a: b:
+    lib.stringLength a < lib.stringLength b
+    || (lib.stringLength a == lib.stringLength b && a < b);
 
   # Stands in for the assertions option that NixOS, nix-darwin, and
   # home-manager each declare.
@@ -152,11 +158,46 @@ in
   testWoodConvention = {
     expr = lib.take 4 (hostnamesWith hostname-convention-wood).available;
     expected = [
-      "acacia"
-      "alder"
       "ash"
-      "aspen"
+      "elm"
+      "fir"
+      "koa"
     ];
+  };
+  testPetalConvention = {
+    expr = lib.take 4 (hostnamesWith hostname-convention-petal).available;
+    expected = [
+      "iris"
+      "lily"
+      "rose"
+      "aster"
+    ];
+  };
+  testBeanConvention = {
+    expr = lib.take 4 (hostnamesWith hostname-convention-bean).available;
+    expected = [
+      "red"
+      "soy"
+      "wax"
+      "fava"
+    ];
+  };
+  # The periodic table follows atomic number.  Every other pool is shortest
+  # first and then alphabetical.
+  testPoolOrder = {
+    expr =
+      lib.all
+        (
+          profile:
+          (hostnamesWith profile).pool
+          == lib.sort shorterOrEarlier (hostnamesWith profile).pool
+        )
+        [
+          hostname-convention-bean
+          hostname-convention-petal
+          hostname-convention-wood
+        ];
+    expected = true;
   };
   testTwoConventionsRejected = {
     expr = rejects (hodonOf {
