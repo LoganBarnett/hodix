@@ -1,0 +1,44 @@
+#+title:     Roadmap
+#+author:    Logan Barnett
+#+email:     logustus@gmail.com
+#+date:      <2026-11-05 Thu>
+#+language:  en
+#+file_tags:
+#+tags:
+
+This document records where hodix is headed.  Nothing here is built yet.
+
+* Federation
+
+The first goal after the facts baseline is to express a hodocule.
+
+Any hodon can federate with another.  The owners of both hodons exchange a
+handshake.  Each owner states which permissions and resources the other hodon
+is granted.  Either party can end the grants or the connection itself at any
+time.
+
+** Connection
+
+Two federated hodons connect to each other over WireGuard.  The link is peer
+to peer across the Internet.  Some esoteric means of direct connection may
+also carry it.  Seeing both hodons bring up this link is one of the key proofs
+we want.
+
+** Reaching a service on another hodon
+
+A hodocule gains a hodon without any device trusting a new certificate.
+
+Each hodon's root certificate covers every name under ~hodon.internal~.  It is
+not limited to the hodon's own domain.  Each hodon also runs an nginx
+instance.  That instance translates TLS with its twin on the other hodon.
+
+Take a client on ~proton~ that wants ~nextcloud.wood.hodon.internal~.  The
+hodon ~wood~ is federated with ~proton~.
+
+1. The client's DNS resolves the name to the nginx instance on ~proton~.
+2. That nginx answers under the root certificate of ~proton~.  Every client
+   device on ~proton~ already trusts it.
+3. It re-encrypts the request under the TLS of ~wood~.  The request then
+   crosses the WireGuard interface.
+4. The nginx instance on ~wood~ forwards the request to the Nextcloud instance
+   in ~wood~.

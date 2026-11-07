@@ -1,0 +1,43 @@
+#+title:     Contributing
+#+author:    Logan Barnett
+#+email:     logustus@gmail.com
+#+date:      <2026-11-05 Thu>
+#+language:  en
+#+file_tags:
+#+tags:
+
+hodix is both a product and an API for other people's networks.  The bar for a
+change is higher than in a personal configuration.
+
+* Public surface
+
+Every option, flake output, and importable file path is public API.  Changing
+one breaks other people's hodons.
+
+1. Every option has a type and a description.
+2. A type is as strict as its meaning allows.  A constraint can be relaxed
+   later.  It cannot be tightened without breaking someone.
+3. Nothing carries a site, family, or owner name.  Names describe roles.
+
+* Code
+** Nix
+*** Modules and profiles
+
+[[file:README.org::*Layout][README - Layout]] describes the split between modules and profiles.
+
+*** Initialisms
+
+Use Pascal initialisms such as ~Url~ when authoring new camel case
+identifiers.  Do not preserve them as ~URL~.
+
+* Tests
+
+Every module lands with tests.  Tests live under ~tests~ and run through
+~nix flake check~.  Checks that reject bad inputs needs a test showing the
+rejection.
+
+* Documentation
+
+Documents are org-mode files.  Every document is reachable by following links
+from ~README.org~.  Each link carries a one-line summary.  The summary lets a
+reader decide whether to follow the link.

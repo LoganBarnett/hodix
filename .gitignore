@@ -1,0 +1,10 @@
+# Keep editor, operating system, and personal tooling ignores in your global
+# git ignore.  Entries here are specific to this project, and each one carries
+# a comment that justifies it.
+
+# direnv caches the development shell here.
+/.direnv/
+
+# Nix leaves symlinks to build results here.
+/result
+/result-*
