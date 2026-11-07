@@ -13,9 +13,9 @@ The lines under Imports are Claude Code imports.  They are not org links.
 Claude Code inlines each named file before the first turn.  ~CLAUDE.md~ is a
 symlink to this file.
 
-An import is a line that is exactly an at sign followed by a path.  Each
-import is a paragraph of its own.  Do not replace an import with an org link.
-A link can be skipped and an import cannot.
+An import is a line that is exactly an at sign followed by a path.  Each import
+is a paragraph of its own.  Do not replace an import with an org link.  A link
+can be skipped and an import cannot.
 
 * Documents
 
@@ -27,8 +27,8 @@ No file lists in documentation.
 
 * Prose rules
 
-These apply to comments, option descriptions, org documents, commit bodies,
-and replies.  The reasoning behind each one is in rust-template's
+These apply to comments, option descriptions, org documents, commit bodies, and
+replies.  The reasoning behind each one is in rust-template's
 [[https://github.com/LoganBarnett/rust-template/blob/main/docs/contribution-rationale.org][=docs/contribution-rationale.org=]].
 
 1. Sentences are short.  One idea each.  About twenty words.
@@ -50,8 +50,8 @@ and replies.  The reasoning behind each one is in rust-template's
 12. When unsure whether to write a comment, do not.
 13. Draft prose longer than a paragraph in a scratch file.  Rewrite it against
     this list.  Only the rewrite lands.
-14. Lists are numbered whenever the format allows.  A number lets a reader
-    refer to an item.
+14. Lists are numbered whenever the format allows.  A number lets a reader refer
+    to an item.
 
 * Nix
 

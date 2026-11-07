@@ -6,18 +6,16 @@
 #+file_tags:
 #+tags:
 
-hodix is a set of Nix modules and configurations for running a self-contained
-IT center.  It is meant for a household or a small business.
+hodix is a set of Nix modules and configurations for running a self-contained IT
+center.  It is meant for a household or a small business.
 
-The name is short for hodos-nix.  "Hodos" is the Greek root for a way or a
-road.
+The name is short for hodos-nix.  "Hodos" is the Greek root for a way or a road.
 
 * Vocabulary
 
 - hodon :: A network that runs hodix.  Every hodon has a name.  One example is
   ~proton~.
-- hodocule :: A network of hodons.  The [[*Roadmap][Roadmap]] says how hodons
-  will join one.
+- hodocule :: A network of hodons.  The [[*Roadmap][Roadmap]] says how hodons will join one.
 - hostname convention :: A themed pool of host names for a hodon to draw from.
   Nobody has to invent memorable names.  The periodic table is one convention.
   Kinds of wood is another.
@@ -31,8 +29,7 @@ until its options are set.
 
 A directory of profiles holds inert fragments.  A profile has no ~options~ or
 ~config~ attributes.  Importing a profile is what activates it.  nixpkgs uses
-the same word for the predefined configurations under its ~profiles~
-directory.
+the same word for the predefined configurations under its ~profiles~ directory.
 
 The prefix names the platform.  It is ~nixos~, ~darwin~, or ~home~ for Home
 Manager.  The ~system~ prefix means the file works on NixOS and nix-darwin but
@@ -43,8 +40,8 @@ not Home Manager.  The ~agnostic~ prefix means the file works on all three.
 Facts are declared data about a hodon.  Other modules read them.  Facts set
 almost nothing on a host themselves.
 
-The facts are options under ~hodon~.  [[file:agnostic-modules/facts.nix]]
-declares them.  Each option carries its own description.
+The facts are options under ~hodon~.  [[file:agnostic-modules/facts.nix]] declares
+them.  Each option carries its own description.
 
 ** Declaring a hodon
 
@@ -71,16 +68,16 @@ A hodon's facts are an ordinary module.
 
 ** Using the facts
 
-A flake needs the facts before any host exists.  Which hosts to build is
-itself a fact.  And the facts themselves don't belong to any one host.
-~lib.mkHodon~ fills that gap.  It is called once per flake, never inside a host.
+A flake needs the facts before any host exists.  Which hosts to build is itself
+a fact.  And the facts themselves don't belong to any one host.  ~lib.mkHodon~
+fills that gap.  It is called once per flake, never inside a host.
 
 It evaluates the facts outside any host and returns three attributes:
 
 1. ~hodon~ is the validated facts.  Reading it fails if any defect exists, and
    the failure lists every defect.  The flake enumerates hosts from it.
-2. ~module~ carries the same definitions into a host.  Import it into every
-   host so the facts appear there as ~config.hodon~.
+2. ~module~ carries the same definitions into a host.  Import it into every host
+   so the facts appear there as ~config.hodon~.
 3. ~forHost~ is ~module~ plus the identity of one host.  A host cannot tell
    which ~hodon.hosts~ entry is its own, so ~forHost "silicon"~ sets
    ~hodix.hostName~ for it.
@@ -122,19 +119,18 @@ Inside a host, ~config.hodix.host~ is that host's own facts, so
 ~config.hodix.host.fqdn~ is ~silicon.proton.hodon.internal~ on silicon.  The
 whole hodon is still there as ~config.hodon~.
 
-~hodix.nixosModules.host~ and ~hodix.darwinModules.host~ apply the host's
-facts to NixOS and nix-darwin.  Each sets ~networking.hostName~,
-~networking.domain~, and ~nixpkgs.hostPlatform~ as defaults, so a host can
-still override them.
+~hodix.nixosModules.host~ and ~hodix.darwinModules.host~ apply the host's facts
+to NixOS and nix-darwin.  Each sets ~networking.hostName~, ~networking.domain~,
+and ~nixpkgs.hostPlatform~ as defaults, so a host can still override them.
 
-Export ~hodonFacts.hodon~ as a flake output and scripts can read the same
-facts with ~nix eval~.
+Export ~hodonFacts.hodon~ as a flake output and scripts can read the same facts
+with ~nix eval~.
 
 ** Internal domain
 
-Every hodon uses the domain ~<name>.hodon.internal~.  The domain is derived
-from the name and cannot be set.  Federation depends on every hodon sharing
-the suffix.
+Every hodon uses the domain ~<name>.hodon.internal~.  The domain is derived from
+the name and cannot be set.  Federation depends on every hodon sharing the
+suffix.
 
 ** Hostname conventions
 
@@ -148,32 +144,30 @@ Importing a convention's profile selects it.
 
 ~hodon.hostnames.available~ then lists the names no host has taken.
 
-A convention is offered and not enforced.  Devices the hodon does not build
-keep whatever names they have.
+A convention is offered and not enforced.  Devices the hodon does not build keep
+whatever names they have.
 
-A custom convention sets ~hodon.hostnames.convention~ and
-~hodon.hostnames.pool~ directly.
+A custom convention sets ~hodon.hostnames.convention~ and ~hodon.hostnames.pool~
+directly.
 
 ** Validation
 
 Invalid facts fail evaluation.  Option types reject malformed values.
 
-Some defects span several facts.  Two hosts claiming one address is an
-example.  These are collected and reported together.  ~lib.mkHodon~ throws
-them.  Inside a host they are assertions.
+Some defects span several facts.  Two hosts claiming one address is an example.
+These are collected and reported together.  ~lib.mkHodon~ throws them.  Inside a
+host they are assertions.
 
 * Roadmap
 
-[[file:docs/roadmap.org]] describes federation.  It covers how two hodons will
-form a hodocule and reach each other's services without trusting new
-certificates.
+[[file:docs/roadmap.org]] describes federation.  It covers how two hodons will form
+a hodocule and reach each other's services without trusting new certificates.
 
 * Contributing
 
-[[file:CONTRIBUTING.org]] sets the bar for a change.  hodix is both a product
-and an API, so the bar is high.
+[[file:CONTRIBUTING.org]] sets the bar for a change.  hodix is both a product and an
+API, so the bar is high.
 
 * License
 
-hodix is licensed under AGPL-3.0-or-later.  [[file:LICENSE]] holds the full
-text.
+hodix is licensed under AGPL-3.0-or-later.  [[file:LICENSE]] holds the full text.

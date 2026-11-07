@@ -11,6 +11,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    org-fmt = {
+      url = "github:LoganBarnett/org-fmt";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -19,6 +23,7 @@
       nix-darwin,
       nixfmt-strict-width,
       nixpkgs,
+      org-fmt,
     }:
     let
       inherit (nixpkgs) lib;
@@ -73,7 +78,14 @@
         {
           default = pkgs.mkShell {
             packages = [
+              # Lint GitHub Action files.
+              pkgs.actionlint
+              # Include a Nix formatter that uses real width instead of
+              # post-indented width for width calculations.
               nixfmt-strict-width.packages.${system}.default
+              # Format org-mode files.
+              org-fmt.packages.${system}.default
+              # Generic formatter that can handle the entire tree.
               pkgs.treefmt
             ];
           };

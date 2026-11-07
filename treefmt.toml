@@ -2,3 +2,8 @@
 command = "nixfmt"
 options = ["--width=80"]
 includes = ["*.nix"]
+
+[formatter.org-fmt]
+command = "org-fmt"
+options = ["--in-place"]
+includes = ["*.org"]

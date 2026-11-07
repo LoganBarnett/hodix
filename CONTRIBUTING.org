@@ -27,14 +27,23 @@ one breaks other people's hodons.
 
 *** Initialisms
 
-Use Pascal initialisms such as ~Url~ when authoring new camel case
-identifiers.  Do not preserve them as ~URL~.
+Use Pascal initialisms such as ~Url~ when authoring new camel case identifiers.
+Do not preserve them as ~URL~.
 
 * Tests
 
-Every module lands with tests.  Tests live under ~tests~ and run through
-~nix flake check~.  Checks that reject bad inputs needs a test showing the
-rejection.
+Every module lands with tests.  Tests live under ~tests~ and run through ~nix
+flake check~.  Checks that reject bad inputs needs a test showing the rejection.
+
+GitHub runs ~nix flake check~ and ~treefmt --fail-on-change~ on every pull
+request.  Both must pass before a merge into ~main~.  The rule lives in
+~.github/branch-protection.json~ and is applied by hand, because the token a
+workflow runs with cannot administer branch protection:
+
+#+begin_src sh :results none :exports code
+gh api --method PUT repos/LoganBarnett/hodix/branches/main/protection \
+  --input .github/branch-protection.json
+#+end_src
 
 * Documentation
 
