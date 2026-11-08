@@ -171,6 +171,86 @@ take it.  Each convention suggests one.
 A custom convention sets ~hodon.hostnames.convention~ and ~hodon.hostnames.pool~
 directly.
 
+** Users and groups
+
+Users name their groups, and a group names the groups it belongs to.  A group's
+~members~ is derived from both, so membership has one source.
+[[file:agnostic-modules/identity.nix]] declares these options.
+
+#+begin_src nix :exports code
+  {
+    hodon = {
+      users.ada = {
+        fullName = "Ada Lovelace";
+        groups = [
+          "family"
+          "nextcloud-admins"
+        ];
+      };
+      groups = {
+        family = { };
+        nextcloud-admins.groups = [ "nextcloud-users" ];
+        nextcloud-users = { };
+      };
+    };
+  }
+#+end_src
+
+Here ~nextcloud-users.members~ holds ~ada~ through ~nextcloud-admins~.  Roles
+build this way.  An admin group belongs to its user group, and nobody is listed
+twice.
+
+A group exists once it is declared under ~hodon.groups~.  Naming any other group
+is a defect, so a typo fails at eval and not at login.  A group that leads back
+to itself is a defect too.  Each group maps one to one onto a directory group
+with ~members~ already flattened, so a directory that cannot nest groups loses
+nothing.
+
+** Hodocule
+
+A hodon's facts hold its own view of the hodocule.  There is no central record.
+Federation is pairwise and not transitive, so the hodocule is the set of peers
+the hodon has shaken hands with.  [[file:agnostic-modules/hodocule.nix]] declares
+these options.
+
+A hodon publishes a card.  The card is the module a peer imports to add the
+hodon to its hodocule, and it carries only what the hodon chose to publish.
+
+#+begin_src nix :exports code
+{
+  hodon = {
+    name = "proton";
+    rootCertificate = builtins.readFile ./pki/root.pem;
+    wireguard = {
+      publicKey = "...";
+      endpoint = "vpn.example.net:51820";
+    };
+    groups = {
+      nextcloud-users = { };
+      family.exported = true;
+    };
+  };
+}
+#+end_src
+
+~hodix.lib.cardText hodonFacts.hodon~ renders the card as Nix source.  Export it
+as a flake output and ~nix eval --raw~ writes the file to hand over.
+
+The peer imports that file and the hodon appears under its
+~hodon.hodocule.peers~.  Each entry is the peer's card plus what this hodon
+decides about it.  Nothing is decided yet.  Grants will land here once identity
+federation is designed.
+
+1. ~rootCertificate~ is PEM text and not a path.  A card crosses repositories as
+   one file.
+2. ~wireguard.endpoint~ may be null on one side of a pair.  Both null is a
+   defect, since neither side could open the link.
+3. ~groups~ names the groups the peer attests membership for.  A grant by group
+   may name only these.  On the home side, ~exported~ marks a group for the
+   card.
+4. ~hodon.hodocule.domains~ is the hodon's domain and every peer's.  A roaming
+   device routes exactly these through its tunnel home.
+
 ** Validation
 
 Invalid facts fail evaluation.  Option types reject malformed values.
@@ -183,6 +263,7 @@ host they are assertions.
 
 [[file:docs/roadmap.org]] describes federation.  It covers how two hodons will form
 a hodocule and reach each other's services without trusting new certificates.
+The facts for it exist.  The link and the bridge do not.
 
 * Contributing
 

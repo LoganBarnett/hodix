@@ -32,7 +32,9 @@
       # deduplicate a module imported twice when it is a path.
       agnosticModules = {
         facts = ./agnostic-modules/facts.nix;
+        hodocule = ./agnostic-modules/hodocule.nix;
         host = ./agnostic-modules/host.nix;
+        identity = ./agnostic-modules/identity.nix;
       };
       agnosticProfiles = {
         hostname-convention-bean =
