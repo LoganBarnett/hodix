@@ -9,11 +9,14 @@
 let
   inherit (lib) mkOption types;
   ipv4 = import ../lib/ipv4.nix { inherit lib; };
+  inherit (import ../lib/options.nix { inherit lib; })
+    dnsLabel
+    derived
+    notLabel
+    notLabels
+    ;
   cfg = config.hodon;
 
-  labelPattern = "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?";
-  isLabel = name: builtins.match labelPattern name != null;
-  dnsLabel = types.strMatching labelPattern;
   macAddress = types.strMatching "([0-9a-f]{2}:){5}[0-9a-f]{2}";
   # A named type keeps the octet pattern out of error messages.
   ipv4Address = lib.mkOptionType {
@@ -38,21 +41,6 @@ let
     check = value: lib.elem value lib.systems.doubles.all;
     merge = lib.mergeEqualOption;
   };
-
-  # Option documentation is generated without a configured hodon.  The fixed
-  # defaultText keeps it from forcing the value.
-  derived =
-    {
-      type,
-      description,
-      value,
-    }:
-    mkOption {
-      inherit type description;
-      readOnly = true;
-      default = value;
-      defaultText = lib.literalMD "derived";
-    };
 
   networkModule =
     { config, ... }:
@@ -235,8 +223,6 @@ let
   ) networkPairs;
   vlanGroups = shared (lib.groupBy (network: toString network.vlanId) vlans);
   paths = lib.concatMapStringsSep ", " (interface: interface.path);
-  notLabels = names: lib.filter (name: !isLabel name) names;
-  notLabel = name: "`${name}` is not a lower-case DNS label.";
 
   failures = lib.concatLists [
     (map (name: "hodon.hosts.${name}: ${notLabel name}") (

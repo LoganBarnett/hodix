@@ -1,4 +1,21 @@
 { lib, agnosticModules }:
+let
+  # The module a peer imports to add this hodon to its hodocule.  It carries
+  # only what the hodon chose to publish.
+  card =
+    hodon:
+    if hodon.rootCertificate == null || hodon.wireguard.publicKey == null then
+      throw "A card needs hodon.rootCertificate and hodon.wireguard.publicKey."
+    else
+      {
+        hodon.hodocule.peers.${hodon.name} = {
+          inherit (hodon) rootCertificate wireguard;
+          groups = lib.attrNames (
+            lib.filterAttrs (_: group: group.exported) hodon.groups
+          );
+        };
+      };
+in
 {
   # Evaluates a hodon's facts once and outside any host.  The result's hodon
   # attribute is the validated facts.  Its module attribute carries the same
@@ -28,4 +45,9 @@
         hodix.hostName = name;
       };
     };
+
+  inherit card;
+
+  # The card as Nix source, ready to hand to a peer.
+  cardText = hodon: lib.generators.toPretty { } (card hodon) + "\n";
 }
