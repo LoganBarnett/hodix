@@ -27,4 +27,24 @@ in
   darwin = suite "darwin" (
     import ./darwin.nix { inherit lib nix-darwin hodix; }
   );
+  secrets = suite "secrets" (
+    import ./secrets.nix {
+      inherit
+        lib
+        nix-darwin
+        nixpkgs
+        hodix
+        ;
+    }
+  );
+  tls = suite "tls" (
+    import ./tls.nix {
+      inherit
+        lib
+        nix-darwin
+        nixpkgs
+        hodix
+        ;
+    }
+  );
 }

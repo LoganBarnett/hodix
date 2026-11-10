@@ -62,4 +62,20 @@ in
         != null;
     merge = lib.mergeEqualOption;
   };
+  # An ed25519 key is always 68 base64 characters, so the pattern is exact.  A
+  # comment and a trailing newline are allowed, since the text usually comes
+  # straight from a .pub file.
+  sshEd25519PublicKey = lib.mkOptionType {
+    name = "sshEd25519PublicKey";
+    description = "OpenSSH ed25519 public key, as written in a .pub file";
+    descriptionClass = "noun";
+    check =
+      value:
+      lib.isString value
+      &&
+        builtins.match
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43}( [^\n]*)?\n?"
+          value != null;
+    merge = lib.mergeEqualOption;
+  };
 }
