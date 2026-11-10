@@ -14,6 +14,7 @@ let
     derived
     notLabel
     notLabels
+    sshEd25519PublicKey
     ;
   cfg = config.hodon;
 
@@ -149,6 +150,15 @@ let
             The host's attachments to the hodon's networks.  Each entry is one
             address on one network.  The attribute name is a label of your
             choosing and is not the operating system's device name.
+          '';
+        };
+        sshHostKey = mkOption {
+          type = types.nullOr sshEd25519PublicKey;
+          default = null;
+          example = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... root@silicon";
+          description = ''
+            The host's ed25519 SSH host public key.  Secrets for the host are
+            encrypted to it.  Null means the host can hold no secret.
           '';
         };
         primaryInterface = mkOption {

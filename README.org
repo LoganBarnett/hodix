@@ -259,11 +259,113 @@ Some defects span several facts.  Two hosts claiming one address is an example.
 These are collected and reported together.  ~lib.mkHodon~ throws them.  Inside a
 host they are assertions.
 
+* Secrets
+
+hodix keeps secrets with agenix and agenix-rekey.  A secret is encrypted to the
+hodon's master identity and rekeyed to the SSH host key of each host that uses
+it.  The generators from [[https://github.com/LoganBarnett/agenix-rekey-generators][agenix-rekey-generators]] create what can be created, so
+a password or a key pair is declared and never typed.
+
+The hodon declares three things.  [[file:agnostic-modules/secrets.nix]] holds the
+first two and [[file:agnostic-modules/facts.nix]] the third.
+
+1. ~hodix.secrets.directory~ is the directory of the repository that holds them.
+   A hand-written secret is ~<name>.age~ inside it.  Generated secrets go under
+   ~generated~ and each host's rekeyed copies under ~rekeyed/<host>~.
+2. ~hodix.secrets.masterIdentities~ names the age identities that can open every
+   secret.
+3. ~hodon.hosts.<name>.sshHostKey~ is the host's ed25519 SSH host public key.
+   Secrets for the host are encrypted to it, so a host without one can hold
+   none.
+
+#+begin_src nix :exports code
+{
+  hodix.secrets = {
+    directory = ./secrets;
+    masterIdentities = [
+      {
+        identity = ./secrets/master.age;
+        pubkey = ./secrets/master.pub;
+      }
+    ];
+  };
+  hodon.hosts.silicon.sshHostKey = "ssh-ed25519 AAAA... root@silicon";
+}
+#+end_src
+
+Hosts import ~hodix.nixosModules.secrets~ or ~hodix.darwinModules.secrets~.
+[[file:system-modules/secrets.nix]] turns the settings above into agenix-rekey
+configuration for the host.
+
+The flake hands agenix-rekey the configurations so its commands can find every
+secret, and the development shell carries the ~agenix~ command.
+
+#+begin_src nix :exports code
+{
+  agenix-rekey = hodix.inputs.agenix-rekey.configure {
+    userFlake = self;
+    nixosConfigurations = self.nixosConfigurations;
+    darwinConfigurations = self.darwinConfigurations or { };
+  };
+  devShells.default = pkgs.mkShell {
+    packages = [ hodix.inputs.agenix-rekey.packages.${system}.default ];
+  };
+}
+#+end_src
+
+~agenix generate~ creates every generated secret and ~agenix rekey~ encrypts
+each secret to the hosts that use it.  With ~ADD_TO_GIT=true~ in the
+environment, ~agenix generate~ also adds to git the files a generator writes
+beside a secret, such as a certificate.
+
+* TLS
+
+Every hodon has a root certificate.  Its services present certificates signed by
+it, and every host trusts it.  The root is constrained to ~hodon.domain~, so a
+stolen root key mints nothing outside the hodon.  [[file:agnostic-modules/tls.nix]]
+declares the root's settings and [[file:system-modules/tls.nix]] issues and trusts.
+
+Hosts import ~hodix.nixosModules.tls~ or ~hodix.darwinModules.tls~.  It brings
+the secrets module with it.  The hodon sets the root's subject once.  The
+organization defaults to the hodon's name.
+
+#+begin_src nix :exports code
+{
+  hodix.tls.subject = {
+    country = "US";
+    state = "Oregon";
+    locality = "Portland";
+  };
+}
+#+end_src
+
+The root is the generated secret ~root-ca~, so ~agenix generate~ writes its
+certificate to ~generated/root-ca.crt~ under the secrets directory.  Its key
+never leaves the repository.  Once that file exists, ~hodon.rootCertificate~
+defaults to it, so the card and every host's trust store carry the same root.
+
+A service declares the certificate it presents.
+
+#+begin_src nix :exports code
+{
+  hodix.tls.certificates."ldap.proton.hodon.internal" = { };
+}
+#+end_src
+
+The name must be under ~hodon.domain~.  The key is generated as a secret of the
+host and the certificate is written beside it.  Certificates are short-lived, 47
+days by the generator's default.  ~hodix.tls.certificateValidityDays~ changes
+that for the hodon and a certificate's own ~validityDays~ for itself.
+~config.hodix.tls.certificates.<name>~ then carries ~keyFile~, the key's path on
+the host, and ~certificateFile~, the certificate in the repository.  Root alone
+can read the key, so a service on NixOS reads it through ~LoadCredential~.
+
 * Roadmap
 
 [[file:docs/roadmap.org]] describes federation.  It covers how two hodons will form
 a hodocule and reach each other's services without trusting new certificates.
-The facts for it exist.  The link and the bridge do not.
+The facts for it exist.  The link and the bridge do not.  It ends with the order
+the first hodocule gets built in.
 
 * Contributing
 
