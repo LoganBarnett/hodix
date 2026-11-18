@@ -1,0 +1,327 @@
+#+title:     Codebase
+#+author:    Logan Barnett
+#+email:     logustus@gmail.com
+#+date:      <2026-11-15 Sun>
+#+language:  en
+#+file_tags:
+#+tags:
+
+This document describes general patterns and locations in the codebase.
+
+* File Layout
+
+** Modules and Profiles
+
+There are two axes of Nix files that influence configuration.  On one axis, we
+have ~module~ / ~profile~.  On the other is the Nix system involved.
+
+A module has some combination of three attributes: ~config~, ~imports~, and
+~options~.  These declare options and all modules are always imported by all
+hosts.  With no extra configuration, nothing activates as a result of this
+import.
+
+Profiles provide that activation.  Importing a profile means you wish to turn it
+on, and apply its effects.  This can stand up servers, populate databases, and
+even manage your DNS records with your registrar.  Some profiles will have
+functionality built in to conditionally activate.  Much of the ~hodix~ profiles
+work this way by inspecting ~facts~ to determine a configuration state.
+
+The Nix system refers to which harness (for lack of a better term) the
+configuration is working with:
+
+| System                     | directory prefix |
+|----------------------------+------------------|
+| NixOS                      | nixos            |
+| nix-darwin                 | darwin           |
+| Home Manager               | home             |
+| Either NixOS or nix-darwin | system           |
+| Any system                 | agnostic         |
+
+Together you combine these, system first and then module/profile.  So
+~nixos-modules/nextcloud.nix~ contains a module whose returned ~attrset~ only
+has ~config~, ~imports~, and ~options~.  Importing it causes no change, and it
+is expected to have already been imported.
+
+A ~nixos-profiles/nextcloud.nix~ (yes, you can have both) would lay down the
+configuration for ~nextcloud~ and install it on the host that imported the file.
+
+# Implement: Currently we have nothing using the `-facts` suffix.  In
+# nix-config, this would done as a suffix on the Nix file itself.  We expect
+# hodix to be dominated by this, practically speaking.  Thus they should get
+# their own directory.
+The exception for profiles is anything suffixed with ~-facts~ (e.g.
+~nixos-facts/nextcloud.nix~).  These will be imported on all ~hodix~ managed
+hosts, and it inspects ~config.hodix~ to decide what to do.  This is how ~hodix~
+applies facts across many hosts.  We still call these profiles because they are
+applying configuration, instead of declaring what configuration could be
+applied.
+
+
+* Hodon
+
+A hodon is the term for a network managed via ~hodix~.  We configure hodons via
+facts.
+
+** Facts
+
+Facts are declared data about a hodon, and generally span across the hodon
+rather than being restricted to a single host.  Facts profiles read them.
+
+The facts are options under ~hodon~.  [[file:../agnostic-modules/facts.nix]]
+declares them.  Each option carries its own description.
+
+*** Declaring a hodon
+
+A hodon's facts are an ordinary module.  An example configuration:
+
+#+begin_src nix :exports code
+{
+  hodon = {
+    name = "home";
+    defaultHost = "balcony";
+    networks.main = {
+      vlanId = 10;
+      ipv4.cidr = "10.10.0.0/24";
+    };
+    hosts.balcony = {
+      system = "x86_64-linux";
+      interfaces.main = {
+        ipv4.address = "10.10.0.9";
+        macAddresses = [ "00:00:5e:00:53:01" ];
+      };
+    };
+  };
+}
+#+end_src
+
+An interface's name is a label and not the operating system's device name.  It
+names the network the interface attaches to, so ~interfaces.main~ is the host's
+attachment to ~networks.main~.  Set ~network~ on the interface when the two
+names must differ.
+
+*** Using the facts
+
+~lib.mkHodon~ reads the facts once, outside any host, and builds every host from
+them.
+
+A flake's outputs can be that one call:
+
+#+begin_src nix :exports code
+# flake.nix
+{
+  inputs.hodix.url = "github:LoganBarnett/hodix";
+  outputs =
+    { self, hodix, ... }:
+    hodix.lib.mkHodon {
+      inherit self;
+      modules = [ ./facts.nix ];
+      hosts = ./hosts;
+    };
+}
+#+end_src
+
+This operates on all hosts which are not declared as ~managed = false~ in the
+facts.  The default profile applies whatever the facts place on a ~managed =
+true~ host.  Hosts are managed by default.  The facts are the ~hodon~ output, so
+scripts read them with ~nix eval~.
+
+[[file:../USAGE.org::*Getting started][USAGE - Getting started]] walks through a new hodon from the template,
+[[file:../USAGE.org::*Services][USAGE - Services]] says how the facts place each service, and
+[[file:../USAGE.org::*Assembling a host by hand][USAGE - Assembling a host by hand]] covers a flake that builds its hosts itself.
+
+
+*** Hosts
+
+A host automatically imports the facts, its own identity, its platform's default
+profile, and ~hosts/<name>.nix~.  The host file generally holds configuration
+for hardware and boot, but little else.
+
+Hodon host options are declared in <link>.
+
+**** Hostnames
+
+A host's name is arbitrary and comes from a convention, so nobody invents one
+and a move changes nothing.  [[file:../USAGE.org::*Naming][USAGE - Naming]] says why and how.
+
+*** Internal domain
+
+Every hodon uses the domain ~<name>.hodon.internal~.  The domain is derived from
+the name and cannot be set.  Federation depends on every hodon sharing the
+suffix.
+
+*** Users and groups
+
+People and groups are facts.  A person names their groups, and a group can
+belong to other groups, so a role is a group inside a group and nobody is listed
+twice.  [[file:../agnostic-modules/identity.nix]] declares these options.
+
+An admin who is also a user, declared once:
+
+#+begin_src nix :exports code
+{
+  hodon = {
+    users.ada = {
+      fullName = "Ada Lovelace";
+      groups = [
+        "family"
+        "nextcloud-admins"
+      ];
+    };
+    groups = {
+      family = { };
+      nextcloud-admins.groups = [ "nextcloud-users" ];
+      nextcloud-users = { };
+    };
+  };
+}
+#+end_src
+
+~ada~ is a Nextcloud user through ~nextcloud-admins~.  A group exists once it is
+declared under ~hodon.groups~, so a typo in a group name fails at eval and not
+at login.
+
+[[file:user-management.org]] covers the directory, passwords, and service accounts,
+as well as the technology used to manage all of it.
+
+*** Hodocule
+
+A hodon's facts hold its own view of the hodocule.  There is no central record.
+Federation is pairwise and not transitive, so the hodocule is the set of peers
+the hodon has shaken hands with.  [[file:../agnostic-modules/hodocule.nix]] declares
+these options.
+
+A hodon publishes a card.  The card is the module a peer imports to add the
+hodon to its hodocule, and it carries only what the hodon chose to publish.
+
+What a hodon declares for its card:
+
+#+begin_src nix :exports code
+{
+  hodon = {
+    name = "home";
+    rootCertificate = builtins.readFile ./pki/root.pem;
+    wireguard = {
+      publicKey = "...";
+      endpoint = "vpn.example.net:51820";
+    };
+    groups = {
+      nextcloud-users = { };
+      family.exported = true;
+    };
+  };
+}
+#+end_src
+
+~hodix.lib.cardText hodonFacts.hodon~ renders the card as Nix source.  Export it
+as a flake output and ~nix eval --raw~ writes the file to hand over.
+
+The peer imports that file and the hodon appears under its
+~hodon.hodocule.peers~.  Each entry is the peer's card plus what this hodon
+decides about it.  Nothing is decided yet.  Grants will land here once identity
+federation is designed.
+
+What the facts require of a card and a peer:
+
+1. ~rootCertificate~ is PEM text and not a path.  A card crosses repositories as
+   one file.
+2. ~wireguard.endpoint~ may be null on one side of a pair.  Both null is a
+   defect, since neither side could open the link.
+3. ~groups~ names the groups the peer attests membership for.  A grant by group
+   may name only these.  On the home side, ~exported~ marks a group for the
+   card.
+4. ~hodon.hodocule.domains~ is the hodon's domain and every peer's.  A roaming
+   device routes exactly these through its tunnel home.
+
+*** Validation
+
+Invalid facts fail evaluation.  Option types reject malformed values.
+
+Some defects span several facts.  Two hosts claiming one address is an example.
+These are collected and reported together.  ~lib.mkHodon~ throws them.  Inside a
+host they are assertions.
+
+
+*** Secrets
+
+hodix keeps secrets with agenix and agenix-rekey.  A secret is encrypted to the
+hodon's master identity and rekeyed to the SSH host key of each host using the
+secret.  The generators from [[https://github.com/LoganBarnett/agenix-rekey-generators][agenix-rekey-generators]] create what can be created,
+so a password or a key pair is declared and never typed.
+
+The hodon declares three things, the first two in
+[[file:../agnostic-modules/secrets.nix]] and the third in
+[[file:../agnostic-modules/facts.nix]]:
+
+1. ~hodix.secrets.directory~ is where secrets are managed.  A hand-written
+   secret is ~issued/<name>.age~ inside it.  Generated secrets go under
+   ~generated~ and each host's rekeyed copies under ~rekeyed/<host>~.
+2. ~hodix.secrets.masterIdentities~ names the age identities that can decrypt
+   every secret.
+3. ~hodon.hosts.<name>.sshHostKey~ is the host's ed25519 SSH host public key.
+   Secrets for the host are encrypted to it.
+
+All of those declared together would look like this:
+
+#+begin_src nix :exports code
+# facts.nix - these are just examples of how to provide explicit values.  All of
+# these settings are provided by default for a hodon.
+{
+  # These are all defaults under `secrets` and thus do not need to be set
+  # explicitly.
+  hodix.secrets = {
+    directory = ./secrets;
+    masterIdentities = [
+      {
+        identity = ./secrets/master.age;
+        pubkey = ./secrets/master.pub;
+      }
+    ];
+  };
+  # `sshHostKey` is generated by default and doesn't need to be explicitly
+  # declared.
+  hodon.hosts.balcony.sshHostKey = "ssh-ed25519 AAAA... root@balcony";
+}
+#+end_src
+
+~mkHodon~ hands ~agenix-rekey~ the configurations when it is given ~self~, and
+adds a development shell that carries the ~agenix~ command.
+[[file:../USAGE.org::*Assembling a host by hand][USAGE - Assembling a host by hand]] shows a flake doing both itself.
+
+~agenix generate --rekey --add-to-git~ creates every generated secret encrypts
+them to the destination hosts that use those secrets.
+
+*** TLS
+
+Every hodon has a root certificate.  Its services present certificates signed by
+it, and every host trusts it.  The root is constrained to ~hodon.domain~, so a
+stolen root key mints nothing outside the hodon.
+[[file:../agnostic-modules/tls.nix]] declares the root's settings and
+[[file:../system-modules/tls.nix]] issues and trusts.
+
+A hodon sets the root's subject, and the organization defaults to its name.
+
+An example subject:
+
+#+begin_src nix :exports code
+{
+  hodix.tls.root.subject = {
+    country = "US";
+    state = "Oregon";
+    location = "Portland";
+  };
+}
+#+end_src
+
+A ~tls-leaf.nix~ module effectively does this for services to both give them a
+TLS leaf certificate:
+
+#+begin_src nix :exports code
+{
+  hodix.tls.certificates."nextcloud.home.hodon.internal" = { };
+}
+#+end_src
+
+The name must be under ~hodon.domain~.  Certificates are short-lived, 47 days by
+the generator's default.  This follows the end-result of the TLS browser max age
+allowed. ~hodix.tls.certificateValidityDays~ changes that for the hodon and a
+certificate's own ~validityDays~ for itself.

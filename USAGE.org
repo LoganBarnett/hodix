@@ -1,0 +1,52 @@
+#+title:     Usage
+#+author:    Logan Barnett
+#+email:     logustus@gmail.com
+#+date:      <2026-11-14 Sat>
+#+language:  en
+#+file_tags:
+#+tags:
+
+How to run a hodon on hodix.  [[file:README.org]] says what hodix is and shows each
+part in a skim.  This document goes deeper, one topic per section.
+
+* Getting started
+
+A hodon is three files and one command.
+
+The command:
+
+#+begin_src sh :results none :exports code
+nix flake init --template github:LoganBarnett/hodix
+#+end_src
+
+The files:
+
+1. ~facts.nix~ is the hodon.  Its name, its default host, its networks and
+   hosts, and its people.  Everything hodix runs is derived from it.
+2. ~hosts/balcony.nix~ is the default host's hardware and boot.
+   ~nixos-generate-config~ writes it, and nothing about hodix goes in it.
+3. ~flake.nix~ hands both to ~hodix.lib.mkHodon~ and is never edited again.
+
+Fill in the host's key and the master identity as the Secrets section of the
+README describes, run ~agenix generate~ and ~agenix rekey~, and deploy the host.
+Every service hodix knows is then running on it.
+
+* Services
+
+Every service has two facts under ~hodon.services.<name>~.  ~enable~ says
+whether hodix runs it.  ~host~ says where it is.  A core service such as the
+directory is on at ~hodon.defaultHost~ unless the facts say otherwise, so the
+one-machine hodon declares nothing about services.  An optional service is off
+and nowhere until it is given a host.
+
+To select a host outside of ~hodon.defaultHost~:
+
+#+begin_src nix :exports code
+{
+  hodon.services.ldap.host = "shed";
+}
+#+end_src
+
+~hodon.defaultHost~ is read by those defaults.  Moving a service is one fact,
+and clients follow the service's name rather than the machine's.
+
