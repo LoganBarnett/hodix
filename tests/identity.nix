@@ -3,7 +3,7 @@ let
   inherit (hodix.lib) mkHodon;
 
   home = {
-    imports = [ ./proton.nix ];
+    imports = [ ./home.nix ];
     hodon = {
       users = {
         ada = {
@@ -13,8 +13,8 @@ let
             "nextcloud-admins"
           ];
         };
-        grace = {
-          fullName = "Grace Hopper";
+        barbara = {
+          fullName = "Barbara Liskov";
           groups = [
             "family"
             "nextcloud-users"
@@ -46,7 +46,7 @@ let
     extra:
     (lib.evalModules {
       modules = [
-        hodix.agnosticModules.identity
+        ../agnostic-modules/identity.nix
         home
         extra
       ];
@@ -62,14 +62,14 @@ in
     expr = hodon.groups.family.members;
     expected = [
       "ada"
-      "grace"
+      "barbara"
     ];
   };
   testMembersFollowGroups = {
     expr = hodon.groups.nextcloud-users.members;
     expected = [
       "ada"
-      "grace"
+      "barbara"
     ];
   };
   testNestingIsOneWay = {
@@ -79,16 +79,16 @@ in
   testMembersFollowGroupsAnyDepth = {
     expr =
       (hodonOf {
-        hodon.users.linus = {
-          fullName = "Linus Torvalds";
+        hodon.users.charles = {
+          fullName = "Charles Babbage";
           groups = [ "staff" ];
         };
         hodon.groups.staff.groups = [ "nextcloud-admins" ];
       }).groups.nextcloud-users.members;
     expected = [
       "ada"
-      "grace"
-      "linus"
+      "barbara"
+      "charles"
     ];
   };
   testEmptyGroupHasNoMembers = {
@@ -100,7 +100,7 @@ in
     expected = "ada";
   };
   testNoUsersIsValid = {
-    expr = (mkHodon { modules = [ ./proton.nix ]; }).hodon.groups;
+    expr = (mkHodon { modules = [ ./home.nix ]; }).hodon.groups;
     expected = { };
   };
   testGoodIdentityHasNoFailures = {
@@ -160,7 +160,7 @@ in
   };
   testFullNameIsRequired = {
     expr = rejects (hodonOf {
-      hodon.users.linus = { };
+      hodon.users.charles = { };
     });
     expected = true;
   };

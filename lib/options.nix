@@ -2,6 +2,7 @@
 { lib }:
 let
   inherit (lib) mkOption types;
+  ipv4 = import ./ipv4.nix { inherit lib; };
   labelPattern = "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?";
   isLabel = name: builtins.match labelPattern name != null;
   pemBegin = "-----BEGIN CERTIFICATE-----";
@@ -9,9 +10,21 @@ let
 in
 {
   inherit isLabel;
+  # Every hodon's domain is `<name>` under this, and a root certificate signs
+  # for all of it by default so a bridge can answer for a federated hodon.
+  internalDomain = "hodon.internal";
   dnsLabel = types.strMatching labelPattern;
   notLabel = name: "`${name}` is not a lower-case DNS label.";
   notLabels = names: lib.filter (name: !isLabel name) names;
+
+  # A named type keeps the octet pattern out of error messages.
+  ipv4Address = lib.mkOptionType {
+    name = "ipv4Address";
+    description = "IPv4 address in dotted-decimal notation";
+    descriptionClass = "noun";
+    check = value: lib.isString value && ipv4.isAddress value;
+    merge = lib.mergeEqualOption;
+  };
 
   # Option documentation is generated without a configured hodon.  The fixed
   # defaultText keeps it from forcing the value.

@@ -5,7 +5,7 @@
   hodix,
 }:
 let
-  proton = hodix.lib.mkHodon { modules = [ ./proton.nix ]; };
+  home = hodix.lib.mkHodon { modules = [ ./home.nix ]; };
   # The framing is all the type checks, so the body is filler.
   certificate = name: ''
     -----BEGIN CERTIFICATE-----
@@ -15,6 +15,7 @@ let
   generatedRoot = builtins.readFile ./fixtures/with-root/generated/root-ca.crt;
   settings.hodix = {
     secrets = {
+      # A directory on disk, since the modules read fixed paths under it.
       directory = ./fixtures;
       masterIdentities = [
         {
@@ -23,19 +24,22 @@ let
         }
       ];
     };
-    tls.subject = {
+    tls.root.subject = {
       country = "US";
       state = "Oregon";
-      locality = "Portland";
+      location = "Portland";
     };
   };
   nixos =
     extra:
     (nixpkgs.lib.nixosSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.nixosModules.host
-        hodix.nixosModules.tls
-        (proton.forHost "silicon")
+        hodix.nixosModules.default
+        ../system-facts/host.nix
+        ../system-facts/secrets.nix
+        ../system-facts/tls.nix
+        (home.forHost "balcony")
         settings
         { system.stateVersion = "26.05"; }
         extra
@@ -44,19 +48,22 @@ let
   darwin =
     extra:
     (nix-darwin.lib.darwinSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.darwinModules.host
-        hodix.darwinModules.tls
-        (proton.forHost "scandium")
+        hodix.darwinModules.default
+        ../system-facts/host.nix
+        ../system-facts/secrets.nix
+        ../system-facts/tls.nix
+        (home.forHost "patio")
         settings
         extra
       ];
     }).config;
-  silicon = nixos {
-    hodix.tls.certificates."ldap.proton.hodon.internal" = { };
+  balcony = nixos {
+    hodix.tls.certificates."ldap.home.hodon.internal" = { };
   };
-  ldap = silicon.hodix.tls.certificates."ldap.proton.hodon.internal";
-  ldapKey = silicon.age.secrets.${ldap.keySecret};
+  ldap = balcony.hodix.tls.certificates."ldap.home.hodon.internal";
+  ldapKey = balcony.age.secrets.${ldap.keySecret};
   withRoot.hodix.secrets.directory = lib.mkForce ./fixtures/with-root;
   failedAssertions =
     configuration:
@@ -65,20 +72,28 @@ let
     );
 in
 {
-  testTheRootIsConstrainedToTheDomain = {
-    expr = silicon.age.secrets.root-ca.settings.tls.domain;
-    expected = "proton.hodon.internal";
+  # A bridge answers for a federated hodon under this root, so the constraint
+  # is wider than the hodon's own domain.
+  testTheRootSignsForEveryHodon = {
+    expr = balcony.age.secrets.root-ca.settings.tls.domain;
+    expected = "hodon.internal";
   };
   testTheRootKeyStaysInTheRepository = {
-    expr = silicon.age.secrets.root-ca.intermediary;
+    expr = balcony.age.secrets.root-ca.intermediary;
     expected = true;
   };
   testTheOrganizationDefaultsToTheHodon = {
-    expr = silicon.age.secrets.root-ca.settings.tls.subject.organization;
-    expected = "proton";
+    expr = balcony.age.secrets.root-ca.settings.tls.subject.organization;
+    expected = "home";
+  };
+  testRootSettingsPassThroughUntouched = {
+    expr =
+      (nixos { hodix.tls.root.common-name = "home root"; })
+      .age.secrets.root-ca.settings.tls.common-name;
+    expected = "home root";
   };
   testTheSubjectSpeaksTheGeneratorsNames = {
-    expr = lib.attrNames silicon.age.secrets.root-ca.settings.tls.subject;
+    expr = lib.attrNames balcony.age.secrets.root-ca.settings.tls.subject;
     expected = [
       "country"
       "location"
@@ -93,7 +108,7 @@ in
   };
   testACertificateIsIssuedForItsName = {
     expr = ldapKey.settings.fqdn;
-    expected = "ldap.proton.hodon.internal";
+    expected = "ldap.home.hodon.internal";
   };
   testValidityIsLeftToTheGeneratorByDefault = {
     expr = ldapKey.settings ? validity;
@@ -103,16 +118,16 @@ in
     expr =
       (nixos {
         hodix.tls.certificateValidityDays = 90;
-        hodix.tls.certificates."ldap.proton.hodon.internal" = { };
-      }).age.secrets."tls-ldap.proton.hodon.internal.key".settings.validity;
+        hodix.tls.certificates."ldap.home.hodon.internal" = { };
+      }).age.secrets."tls-ldap.home.hodon.internal.key".settings.validity;
     expected = 90;
   };
   testACertificateSetsItsOwnValidity = {
     expr =
       (nixos {
         hodix.tls.certificateValidityDays = 90;
-        hodix.tls.certificates."ldap.proton.hodon.internal".validityDays = 30;
-      }).age.secrets."tls-ldap.proton.hodon.internal.key".settings.validity;
+        hodix.tls.certificates."ldap.home.hodon.internal".validityDays = 30;
+      }).age.secrets."tls-ldap.home.hodon.internal.key".settings.validity;
     expected = 30;
   };
   testTheKeyIsASecretOfTheHost = {
@@ -122,25 +137,27 @@ in
   testTheCertificateSitsBesideTheKey = {
     expr = toString ldap.certificateFile;
     expected = toString (
-      ./fixtures + "/generated/tls-ldap.proton.hodon.internal.crt"
+      ./fixtures + "/generated/tls-ldap.home.hodon.internal.crt"
     );
   };
-  testANameOutsideTheDomainIsRejected = {
-    expr = lib.any (lib.hasInfix "not under proton.hodon.internal") (
+  testANameOutsideHodonInternalIsRejected = {
+    expr = lib.any (lib.hasInfix "not under hodon.internal") (
       failedAssertions (nixos {
         hodix.tls.certificates."ldap.example.com" = { };
       })
     );
     expected = true;
   };
-  testImportingSecretsBesideTlsIsFine = {
-    expr =
-      (nixos { imports = [ hodix.nixosModules.secrets ]; })
-      .age.rekey.storageMode;
-    expected = "local";
+  testAFederatedHodonsNameIsAccepted = {
+    expr = lib.any (lib.hasInfix "not under") (
+      failedAssertions (nixos {
+        hodix.tls.certificates."nextcloud.school.hodon.internal" = { };
+      })
+    );
+    expected = false;
   };
   testNothingIsTrustedBeforeTheRootExists = {
-    expr = silicon.security.pki.certificates;
+    expr = balcony.security.pki.certificates;
     expected = [ ];
   };
   testTheRootIsTrustedOnceItExists = {
@@ -151,7 +168,7 @@ in
     expr =
       (hodix.lib.mkHodon {
         modules = [
-          ./proton.nix
+          ./home.nix
           withRoot
         ];
       }).hodon.rootCertificate;

@@ -1,5 +1,4 @@
-# Facts are declared data about a hodon that other modules read.  This module
-# sets almost nothing on a host itself.  See the Facts section of README.org.
+# The base facts module.  Declares everything a hodon needs.
 {
   config,
   lib,
@@ -12,21 +11,16 @@ let
   inherit (import ../lib/options.nix { inherit lib; })
     dnsLabel
     derived
+    internalDomain
+    ipv4Address
     notLabel
     notLabels
     sshEd25519PublicKey
     ;
   cfg = config.hodon;
+  secretsDirectory = config.hodix.secrets.directory;
 
   macAddress = types.strMatching "([0-9a-f]{2}:){5}[0-9a-f]{2}";
-  # A named type keeps the octet pattern out of error messages.
-  ipv4Address = lib.mkOptionType {
-    name = "ipv4Address";
-    description = "IPv4 address in dotted-decimal notation";
-    descriptionClass = "noun";
-    check = value: lib.isString value && ipv4.isAddress value;
-    merge = lib.mergeEqualOption;
-  };
   ipv4Cidr = lib.mkOptionType {
     name = "ipv4Cidr";
     description = "IPv4 network in CIDR notation with no host bits set";
@@ -78,6 +72,52 @@ let
             description = "The prefix length of `cidr`.";
             value = parsed.prefixLength;
           };
+          gateway = mkOption {
+            type = types.nullOr ipv4Address;
+            default = null;
+            example = "10.10.0.1";
+            description = ''
+              The router that carries this network to the Internet.  A host
+              with a fixed address routes through it and DHCP hands it out.
+              Null means the network has none.
+            '';
+          };
+          leases = mkOption {
+            type = types.nullOr (
+              types.submodule {
+                options = {
+                  from = mkOption {
+                    type = ipv4Address;
+                    description = "The first address handed out.";
+                  };
+                  to = mkOption {
+                    type = ipv4Address;
+                    description = "The last address handed out.";
+                  };
+                };
+              }
+            );
+            # The upper half is arbitrary.  A network too small to have one
+            # hands out nothing.
+            default =
+              if parsed.size < 4 then
+                null
+              else
+                {
+                  from = ipv4.fromInt (parsed.base + parsed.size / 2);
+                  to = ipv4.fromInt (parsed.base + parsed.size - 2);
+                };
+            defaultText = lib.literalMD "the upper half of the network";
+            example = {
+              from = "10.10.0.100";
+              to = "10.10.0.199";
+            };
+            description = ''
+              The addresses DHCP hands to devices the facts do not name.  A
+              host's fixed address stays outside them.  Null means DHCP hands
+              out nothing on this network, as on a tunnel.
+            '';
+          };
         };
       };
     };
@@ -106,10 +146,21 @@ let
         macAddresses = mkOption {
           type = types.listOf macAddress;
           default = [ ];
-          example = [ "b8:ca:3a:77:a9:2a" ];
+          example = [ "00:00:5e:00:53:01" ];
           description = ''
             The hardware addresses that reach this interface.  They are
-            written in lower case.
+            written in lower case.  Hodix finds a fixed interface's link by
+            them.
+          '';
+        };
+        device = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "wg0";
+          description = ''
+            The operating system's name for the interface.  Hodix finds the
+            link by `macAddresses` when it has any, so this is for an
+            interface with no hardware address, such as a tunnel.
           '';
         };
       };
@@ -130,17 +181,28 @@ let
         };
         fqdn = derived {
           type = types.str;
-          description = "The host's name under `hodon.domain`.";
+          description =
+            "The host's name under the hodon's domain, `<host>.<name>.hodon.internal`.";
           value = "${name}.${cfg.domain}";
+        };
+        managed = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Whether hodix manages this host.  Unmanaged hosts are manually
+            managed.  The hodon can still refer to these unmanaged hosts for
+            various operations.  Marking it as unmanaged keeps Hodix from trying
+            to manage the host.  So it stays out of secret generation,
+            deployments, etc.
+          '';
         };
         system = mkOption {
           type = types.nullOr nixSystem;
           default = null;
           example = "x86_64-linux";
           description = ''
-            The Nix system this host is built for.  Null means the hodon does
-            not build this host.  Whether hodix can build a given system is a
-            property of hodix and not of the host.
+            The architecture/platform double system of this host.  A managed
+            host must state one and an unmanaged host may leave it null.
           '';
         };
         interfaces = mkOption {
@@ -152,13 +214,35 @@ let
             choosing and is not the operating system's device name.
           '';
         };
+        blockProfiles = mkOption {
+          type = types.listOf types.str;
+          default = [ "default" ];
+          example = [ "child" ];
+          description = ''
+            The `hodon.services.dns.blocking.profiles` entries that say which
+            domains the hodon's DNS refuses this host.
+          '';
+        };
         sshHostKey = mkOption {
           type = types.nullOr sshEd25519PublicKey;
-          default = null;
-          example = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... root@silicon";
+          default =
+            let
+              publicKey =
+                secretsDirectory + "/generated/${name}-ssh-host-key.pub";
+            in
+            if secretsDirectory != null && builtins.pathExists publicKey then
+              lib.trim (builtins.readFile publicKey)
+            else
+              null;
+          defaultText =
+            lib.literalMD
+              "the generated host key, once its public half exists";
+          example = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... root@balcony";
           description = ''
             The host's ed25519 SSH host public key.  Secrets for the host are
-            encrypted to it.  Null means the host can hold no secret.
+            encrypted to it.  It defaults to the key hodix generates for the
+            host once `agenix generate` has written the public half.  Null
+            means the host can hold no secret.
           '';
         };
         primaryInterface = mkOption {
@@ -203,6 +287,43 @@ let
     hasNetwork interface
     && !ipv4.isHostAddress parsedNetworks.${interface.network} interface.address
   ) addressed;
+  inLeases =
+    leases: address:
+    let
+      number = ipv4.toInt address;
+    in
+    ipv4.toInt leases.from <= number && number <= ipv4.toInt leases.to;
+  leasesOf = interface: cfg.networks.${interface.network}.ipv4.leases;
+  leased = lib.filter (
+    interface:
+    hasNetwork interface
+    && leasesOf interface != null
+    && inLeases (leasesOf interface) interface.address
+  ) addressed;
+  networkFailures = lib.concatLists (
+    lib.mapAttrsToList (
+      name: network:
+      let
+        parsed = parsedNetworks.${name};
+        inherit (network.ipv4) cidr gateway leases;
+        path = "hodon.networks.${name}.ipv4";
+        range =
+          ipv4.isHostAddress parsed leases.from
+          && ipv4.isHostAddress parsed leases.to
+          && ipv4.toInt leases.from <= ipv4.toInt leases.to;
+      in
+      lib.optional (gateway != null && !ipv4.isHostAddress parsed gateway)
+        "${path}.gateway is ${gateway}, which is not a host address in ${cidr}."
+      ++
+        lib.optional (leases != null && !range)
+          "${path}.leases runs from ${leases.from} to ${
+            leases.to
+          }, which is not a range of host addresses in ${cidr}."
+      ++ lib.optional (
+        leases != null && gateway != null && inLeases leases gateway
+      ) "${path}.gateway is ${gateway}, which is inside its leases."
+    ) cfg.networks
+  );
   macClaims = lib.concatMap (
     interface: map (mac: interface // { inherit mac; }) interface.macAddresses
   ) interfaces;
@@ -255,6 +376,13 @@ let
         cfg.networks.${interface.network}.ipv4.cidr
       }."
     ) misplaced)
+    (map (
+      interface:
+      "${interface.path}.ipv4.address is ${
+        interface.address
+      }, which is inside the leases of hodon.networks.${interface.network}."
+    ) leased)
+    networkFailures
     (lib.mapAttrsToList (
       address: group:
       "Address ${address} is claimed more than once: ${paths group}."
@@ -272,6 +400,13 @@ let
         lib.concatMapStringsSep ", " (network: network.name) group
       }."
     ) vlanGroups)
+    (lib.concatLists (
+      lib.mapAttrsToList (
+        name: host:
+        lib.optional (host.managed && host.system == null)
+          "hodon.hosts.${name} is managed but has no system."
+      ) cfg.hosts
+    ))
     (lib.concatLists (
       lib.mapAttrsToList (
         name: host:
@@ -295,13 +430,23 @@ let
     (lib.optional (
       !lib.allUnique cfg.hostnames.pool
     ) "hodon.hostnames.pool lists a name more than once.")
+    (lib.optional (!(cfg.hosts ? ${cfg.defaultHost}))
+      "hodon.defaultHost names `${
+        cfg.defaultHost
+      }`, which is not in hodon.hosts."
+    )
+    (lib.optional (
+      cfg.hosts ? ${cfg.defaultHost} && !cfg.hosts.${cfg.defaultHost}.managed
+    ) "hodon.defaultHost names `${cfg.defaultHost}`, which is not managed.")
   ];
 in
 {
+  imports = [ ./secrets.nix ];
+
   options.hodon = {
     name = mkOption {
       type = dnsLabel;
-      example = "proton";
+      example = "home";
       description = ''
         The hodon's name.  It is one DNS label and it is unique within any
         hodocule the hodon joins.
@@ -309,8 +454,16 @@ in
     };
     domain = derived {
       type = types.str;
-      description = "The hodon's internal domain.";
-      value = "${cfg.name}.hodon.internal";
+      description = "The hodon's internal domain, `<name>.hodon.internal`.";
+      value = "${cfg.name}.${internalDomain}";
+    };
+    defaultHost = mkOption {
+      type = types.str;
+      example = "balcony";
+      description = ''
+        The host a service runs on unless its own `host` says otherwise.  It
+        is a host hodix manages.  Nothing else reads it.
+      '';
     };
     hostnames = {
       convention = mkOption {
@@ -354,8 +507,8 @@ in
       type = types.attrsOf (types.submodule hostModule);
       default = { };
       description = ''
-        Every host on the hodon.  This includes hosts the hodon does not
-        build.  Names are lower-case DNS labels.
+        Every host on the hodon.  This includes hosts hodix does not manage.
+        Names are lower-case DNS labels.
       '';
     };
   };

@@ -19,12 +19,30 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.org-fmt.follows = "org-fmt";
     };
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nix-darwin = {
       url = "github:LnL7/nix-darwin/nix-darwin-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nix-hapi = {
+      url = "github:LoganBarnett/nix-hapi";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-hapi-provider-ldap = {
+      url = "github:LoganBarnett/nix-hapi-provider-ldap";
+      inputs.nix-hapi.follows = "nix-hapi";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nixfmt-strict-width = {
       url = "github:LoganBarnett/nixfmt-strict-width";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nixos-anywhere = {
+      url = "github:nix-community/nixos-anywhere";
+      inputs.disko.follows = "disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -32,89 +50,84 @@
       url = "github:LoganBarnett/org-fmt";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Carries the on-demand review of a change set against the prose rules.
+    rust-template = {
+      url = "github:LoganBarnett/rust-template";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.org-fmt.follows = "org-fmt";
+    };
   };
 
   outputs =
-    {
+    inputs@{
       self,
-      agenix,
-      agenix-rekey,
-      agenix-rekey-generators,
       nix-darwin,
       nixfmt-strict-width,
       nixpkgs,
       org-fmt,
+      rust-template,
+      ...
     }:
     let
       inherit (nixpkgs) lib;
       forAllSystems = lib.genAttrs lib.systems.flakeExposed;
-      # These are paths and not imported values.  The module system can only
-      # deduplicate a module imported twice when it is a path.
+      # Every file exported here is a path and not an imported value.  The
+      # module system deduplicates a module imported twice only when it is a
+      # path.  A module that needs a flake input reads it from the
+      # `hodix-inputs` special argument, which `mkHodon` passes and a flake
+      # managing its own hosts passes as `lib.specialArgs`.
       agnosticModules = {
-        facts = ./agnostic-modules/facts.nix;
-        hodocule = ./agnostic-modules/hodocule.nix;
-        host = ./agnostic-modules/host.nix;
-        identity = ./agnostic-modules/identity.nix;
-        secrets = ./agnostic-modules/secrets.nix;
-        tls = ./agnostic-modules/tls.nix;
+        default = ./agnostic-modules/default.nix;
       };
-      agnosticProfiles = {
-        hostname-convention-bean =
-          ./agnostic-profiles/hostname-convention-bean.nix;
-        hostname-convention-periodic-table =
-          ./agnostic-profiles/hostname-convention-periodic-table.nix;
-        hostname-convention-petal =
-          ./agnostic-profiles/hostname-convention-petal.nix;
-        hostname-convention-wood =
-          ./agnostic-profiles/hostname-convention-wood.nix;
+      # Profiles are opt-in, so these are exported by name.
+      agnosticProfiles = import ./agnostic-profiles/default.nix;
+      # A host loads every module for its class at once.  The system modules
+      # work on NixOS and nix-darwin alike, so they are Darwin's whole set.
+      darwinModules = {
+        default = ./system-modules/default.nix;
       };
-      # A system module works on NixOS and nix-darwin alike, so it is exported
-      # under both classes.
-      systemModules = {
-        host = ./system-modules/host.nix;
+      nixosModules = {
+        default = ./nixos-modules/default.nix;
       };
-      # The secrets module brings agenix, agenix-rekey, and the generators with
-      # it, each for the class it is imported into.  A fixed key lets the
-      # module system drop the copy that tls imports when a host imports both.
-      secretsModule = class: {
-        key = "hodix/secrets";
-        _file = "hodix/${class}Modules.secrets";
-        imports = [
-          agenix."${class}Modules".default
-          agenix-rekey."${class}Modules".default
-          agenix-rekey-generators."${class}Modules".default
-          ./system-modules/secrets.nix
-        ];
+      # A facts profile applies what the facts place on the host, so every
+      # managed host loads all of them.  See the File Layout section of
+      # docs/codebase.org.
+      darwinFacts = {
+        default = ./system-facts/default.nix;
       };
-      tlsModule = class: {
-        key = "hodix/tls";
-        _file = "hodix/${class}Modules.tls";
-        imports = [
-          (secretsModule class)
-          ./system-modules/tls.nix
-        ];
+      nixosFacts = {
+        default = ./nixos-facts/default.nix;
       };
-      modulesFor =
-        class:
-        systemModules
-        // {
-          secrets = secretsModule class;
-          tls = tlsModule class;
-        };
-      darwinModules = modulesFor "darwin";
-      nixosModules = modulesFor "nixos";
     in
     {
       inherit
         agnosticModules
         agnosticProfiles
+        darwinFacts
         darwinModules
+        nixosFacts
         nixosModules
         ;
 
       lib = import ./lib/default.nix {
         inherit lib;
-        agnosticModules = lib.attrValues agnosticModules;
+        agnosticModules = [ agnosticModules.default ];
+        hostModules = {
+          darwin = [
+            darwinModules.default
+            darwinFacts.default
+          ];
+          nixos = [
+            nixosModules.default
+            nixosFacts.default
+          ];
+        };
+        inputs = builtins.removeAttrs inputs [ "self" ];
+      };
+
+      templates.default = {
+        path = ./template;
+        description = "A hodon on one machine, built from its facts.";
       };
 
       checks = forAllSystems (
@@ -143,6 +156,9 @@
               org-fmt.packages.${system}.default
               # Generic formatter that can handle the entire tree.
               pkgs.treefmt
+              # Review the change set against the prose rules before offering
+              # it.  It drives the claude command found on PATH.
+              rust-template.packages.${system}.review
             ];
           };
         }

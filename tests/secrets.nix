@@ -5,8 +5,9 @@
   hodix,
 }:
 let
-  proton = hodix.lib.mkHodon { modules = [ ./proton.nix ]; };
+  home = hodix.lib.mkHodon { modules = [ ./home.nix ]; };
   settings.hodix.secrets = {
+    # A directory on disk, since the modules read fixed paths under it.
     directory = ./fixtures;
     masterIdentities = [
       {
@@ -18,10 +19,12 @@ let
   nixos =
     extra:
     (nixpkgs.lib.nixosSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.nixosModules.host
-        hodix.nixosModules.secrets
-        (proton.forHost "silicon")
+        hodix.nixosModules.default
+        ../system-facts/host.nix
+        ../system-facts/secrets.nix
+        (home.forHost "balcony")
         settings
         { system.stateVersion = "26.05"; }
         extra
@@ -30,16 +33,39 @@ let
   darwin =
     extra:
     (nix-darwin.lib.darwinSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.darwinModules.host
-        hodix.darwinModules.secrets
-        (proton.forHost "scandium")
+        hodix.darwinModules.default
+        ../system-facts/host.nix
+        ../system-facts/secrets.nix
+        (home.forHost "patio")
         settings
         extra
       ];
     }).config;
-  silicon = nixos { };
-  scandium = darwin { };
+  balcony = nixos { };
+  patio = darwin { };
+  # A flake's `self.outPath` is a store path string with context, so the
+  # fixture is one too.
+  flakeRoot = "${./.}";
+  # A hodon that leaves every secrets setting to its default.
+  defaults =
+    (nixpkgs.lib.nixosSystem {
+      specialArgs = hodix.lib.specialArgs;
+      modules = [
+        hodix.nixosModules.default
+        ../system-facts/host.nix
+        ../system-facts/secrets.nix
+        (
+          (hodix.lib.mkHodon {
+            modules = [ ./home.nix ];
+            self.outPath = flakeRoot;
+          }).forHost
+            "balcony"
+        )
+        { system.stateVersion = "26.05"; }
+      ];
+    }).config;
   failedAssertions =
     configuration:
     map (entry: entry.message) (
@@ -47,37 +73,84 @@ let
     );
   # A host with no key, holding one secret.
   keyless = {
-    hodon.hosts.silicon.sshHostKey = lib.mkForce null;
+    hodon.hosts.balcony.sshHostKey = lib.mkForce null;
     age.secrets.example = { };
   };
 in
 {
   testRekeyedSecretsAreStoredPerHost = {
-    expr = toString silicon.age.rekey.localStorageDir;
-    expected = toString (./fixtures + "/rekeyed/silicon");
+    expr = toString balcony.age.rekey.localStorageDir;
+    expected = toString (./fixtures + "/rekeyed/balcony");
   };
   testGeneratedSecretsHaveTheirOwnDirectory = {
-    expr = toString silicon.age.rekey.generatedSecretsDir;
+    expr = toString balcony.age.rekey.generatedSecretsDir;
     expected = toString (./fixtures + "/generated");
   };
-  testHandWrittenSecretsSitInTheDirectory = {
-    expr = toString silicon.age.rekey.secretsDir;
-    expected = toString ./fixtures;
+  testHandWrittenSecretsAreIssued = {
+    expr = toString balcony.age.rekey.secretsDir;
+    expected = toString (./fixtures + "/issued");
+  };
+  testTheDirectoryDefaultsToSecretsUnderTheFlake = {
+    expr = toString defaults.hodix.secrets.directory;
+    expected = flakeRoot + "/secrets";
+  };
+  testTheMasterIdentityDefaultsToTheDirectory = {
+    expr = map (
+      identity: toString identity.identity
+    ) defaults.age.rekey.masterIdentities;
+    expected = [ (flakeRoot + "/secrets/master.age") ];
+  };
+  testAManagedHostGeneratesItsHostKey = {
+    expr = {
+      inherit (balcony.age.secrets."balcony-ssh-host-key") intermediary;
+      script = balcony.age.secrets."balcony-ssh-host-key".generator.script;
+    };
+    expected = {
+      intermediary = true;
+      script = "ssh-ed25519-with-pub";
+    };
+  };
+  # The fixtures hold a generated key for balcony, and this hodon states none.
+  testTheHostKeyDefaultsToTheGeneratedOne = {
+    expr =
+      (hodix.lib.mkHodon {
+        modules = [
+          {
+            hodon = {
+              name = "home";
+              defaultHost = "balcony";
+              hosts.balcony.system = "x86_64-linux";
+              # The host has no address, so the network services are off.
+              services = {
+                dhcp.enable = false;
+                dns.enable = false;
+              };
+            };
+            hodix.secrets.directory = ./fixtures/with-root;
+          }
+        ];
+      }).hodon.hosts.balcony.sshHostKey;
+    expected =
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJabRtUihDjJ+AiWalAI+UwL5Wva+0jfiDui5pt7tGxb balcony-ssh-host-key";
+  };
+  testAnAbsentMasterPubkeyIsNull = {
+    expr = map (identity: identity.pubkey) defaults.age.rekey.masterIdentities;
+    expected = [ null ];
   };
   testSecretsAreStoredInTheRepository = {
-    expr = silicon.age.rekey.storageMode;
+    expr = balcony.age.rekey.storageMode;
     expected = "local";
   };
   testTheHostKeyIsTheRecipient = {
-    expr = silicon.age.rekey.hostPubkey;
-    expected = proton.hodon.hosts.silicon.sshHostKey;
+    expr = balcony.age.rekey.hostPubkey;
+    expected = home.hodon.hosts.balcony.sshHostKey;
   };
   testMasterIdentitiesCarryOver = {
-    expr = map (identity: identity.identity) silicon.age.rekey.masterIdentities;
+    expr = map (identity: identity.identity) balcony.age.rekey.masterIdentities;
     expected = [ (toString ./fixtures/master.age) ];
   };
   testGeneratorsAreAvailable = {
-    expr = silicon.age.generators ? tls-ca-root;
+    expr = balcony.age.generators ? tls-ca-root;
     expected = true;
   };
   testAHostWithoutAKeyCannotHoldASecret = {
@@ -104,11 +177,11 @@ in
     expected = true;
   };
   testDarwinRekeyedSecretsAreStoredPerHost = {
-    expr = toString scandium.age.rekey.localStorageDir;
-    expected = toString (./fixtures + "/rekeyed/scandium");
+    expr = toString patio.age.rekey.localStorageDir;
+    expected = toString (./fixtures + "/rekeyed/patio");
   };
   testDarwinHostKeyIsTheRecipient = {
-    expr = scandium.age.rekey.hostPubkey;
-    expected = proton.hodon.hosts.scandium.sshHostKey;
+    expr = patio.age.rekey.hostPubkey;
+    expected = home.hodon.hosts.patio.sshHostKey;
   };
 }

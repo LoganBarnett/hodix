@@ -3,14 +3,18 @@ let
   inherit (hodix.lib) mkHodon;
   inherit (hodix.agnosticProfiles)
     hostname-convention-bean
+    hostname-convention-home
     hostname-convention-periodic-table
     hostname-convention-petal
+    hostname-convention-school
     hostname-convention-wood
     ;
 
-  good = ./proton.nix;
-  duplicateAddress.hodon.hosts.intruder.interfaces.main.ipv4.address =
-    "10.10.0.9";
+  good = ./home.nix;
+  duplicateAddress.hodon.hosts.intruder = {
+    managed = false;
+    interfaces.main.ipv4.address = "10.10.0.9";
+  };
 
   hodonOf =
     extra:
@@ -20,18 +24,37 @@ let
         extra
       ];
     }).hodon;
-  failuresOf =
+  # The facts module alone, so a defect elsewhere cannot hide one here.
+  facts =
     extra:
     (lib.evalModules {
       modules = [
-        hodix.agnosticModules.facts
+        ../agnostic-modules/facts.nix
         good
         extra
       ];
-    }).config.hodix.facts.failures;
+    }).config;
+  failuresOf = extra: (facts extra).hodix.facts.failures;
   fails = needle: extra: lib.any (lib.hasInfix needle) (failuresOf extra);
   rejects = value: !(builtins.tryEval (builtins.deepSeq value value)).success;
-  bare = module: (mkHodon { modules = [ module ]; }).hodon;
+  # The least a hodon needs besides its name, so a rejection is about the name.
+  # The host has no address, so the network services are off.
+  minimal.hodon = {
+    defaultHost = "balcony";
+    hosts.balcony.system = "x86_64-linux";
+    services = {
+      dhcp.enable = false;
+      dns.enable = false;
+    };
+  };
+  bare =
+    module:
+    (mkHodon {
+      modules = [
+        minimal
+        module
+      ];
+    }).hodon;
   hostnamesWith = convention: (hodonOf { imports = [ convention ]; }).hostnames;
   shorterOrEarlier =
     a: b:
@@ -69,8 +92,8 @@ let
 in
 {
   testForHostSeesItsOwnFacts = {
-    expr = (asHost "silicon").fqdn;
-    expected = "silicon.proton.hodon.internal";
+    expr = (asHost "balcony").fqdn;
+    expected = "balcony.home.hodon.internal";
   };
   testUnknownHostNameRejected = {
     expr = rejects (asHost "nope");
@@ -78,22 +101,22 @@ in
   };
   testDomain = {
     expr = hodon.domain;
-    expected = "proton.hodon.internal";
+    expected = "home.hodon.internal";
   };
   testHostName = {
-    expr = hodon.hosts.silicon.name;
-    expected = "silicon";
+    expr = hodon.hosts.balcony.name;
+    expected = "balcony";
   };
   testFqdn = {
-    expr = hodon.hosts.silicon.fqdn;
-    expected = "silicon.proton.hodon.internal";
+    expr = hodon.hosts.balcony.fqdn;
+    expected = "balcony.home.hodon.internal";
   };
   testPrimaryAddress = {
-    expr = hodon.hosts.silicon.ipv4.address;
+    expr = hodon.hosts.balcony.ipv4.address;
     expected = "10.10.0.9";
   };
   testOnlyInterfaceIsPrimary = {
-    expr = hodon.hosts.scandium.ipv4.address;
+    expr = hodon.hosts.patio.ipv4.address;
     expected = "10.10.0.20";
   };
   testDynamicAddressIsNull = {
@@ -101,7 +124,7 @@ in
     expected = null;
   };
   testInterfaceNetworkDefaultsToItsName = {
-    expr = hodon.hosts.silicon.interfaces.vpn.network;
+    expr = hodon.hosts.balcony.interfaces.vpn.network;
     expected = "vpn";
   };
   testNetworkDerivedValues = {
@@ -126,9 +149,9 @@ in
     expr =
       (hodonOf {
         hodon.hostnames.pool = [
-          "silicon"
+          "balcony"
           "pine"
-          "scandium"
+          "patio"
           "cedar"
         ];
       }).hostnames.available;
@@ -151,7 +174,7 @@ in
     expected = {
       convention = "periodic-table";
       pool = 118;
-      available = 116;
+      available = 118;
       next = "hydrogen";
     };
   };
@@ -182,6 +205,25 @@ in
       "fava"
     ];
   };
+  # The hosts of the test hodon are places outside a home, so they are taken.
+  testHomeConvention = {
+    expr = lib.take 4 (hostnamesWith hostname-convention-home).available;
+    expected = [
+      "barn"
+      "coop"
+      "deck"
+      "lawn"
+    ];
+  };
+  testSchoolConvention = {
+    expr = lib.take 4 (hostnamesWith hostname-convention-school).available;
+    expected = [
+      "art"
+      "bio"
+      "civ"
+      "gym"
+    ];
+  };
   # The periodic table follows atomic number.  Every other pool is shortest
   # first and then alphabetical.
   testPoolOrder = {
@@ -194,7 +236,9 @@ in
         )
         [
           hostname-convention-bean
+          hostname-convention-home
           hostname-convention-petal
+          hostname-convention-school
           hostname-convention-wood
         ];
     expected = true;
@@ -228,20 +272,20 @@ in
   };
   testUpperCaseNameRejected = {
     expr = rejects (bare {
-      hodon.name = "Proton";
+      hodon.name = "Home";
     });
     expected = true;
   };
   testDomainIsReadOnly = {
     expr = rejects (hodonOf {
-      hodon.domain = "proton";
+      hodon.domain = "home";
     });
     expected = true;
   };
   testUpperCaseMacRejected = {
     expr = rejects (hodonOf {
       hodon.hosts.printer.interfaces.main = {
-        macAddresses = [ "AC:19:8E:F6:04:A1" ];
+        macAddresses = [ "00:00:5E:00:53:03" ];
       };
     });
     expected = true;
@@ -260,19 +304,33 @@ in
   };
   testUnknownSystemRejected = {
     expr = rejects (hodonOf {
-      hodon.hosts.printer.system = "aarch64-ios";
+      hodon.hosts.barn.system = "aarch64-ios";
     });
     expected = true;
   };
   testAnyKnownSystemAccepted = {
     expr =
-      (hodonOf { hodon.hosts.printer.system = "x86_64-freebsd"; })
-      .hosts.printer.system;
+      (hodonOf { hodon.hosts.barn.system = "x86_64-freebsd"; })
+      .hosts.barn.system;
     expected = "x86_64-freebsd";
+  };
+  testAHostIsManagedByDefault = {
+    expr = (hodonOf { }).hosts.balcony.managed;
+    expected = true;
+  };
+  testAManagedHostNeedsASystem = {
+    expr = fails "hodon.hosts.barn is managed but has no system" {
+      hodon.hosts.barn = { };
+    };
+    expected = true;
+  };
+  testAnUnmanagedHostNeedsNoSystem = {
+    expr = (hodonOf { hodon.hosts.barn.managed = false; }).hosts.barn.system;
+    expected = null;
   };
   testUnknownHostKeyRejected = {
     expr = rejects (hodonOf {
-      hodon.hosts.printer.mac = "ac:19:8e:f6:04:a0";
+      hodon.hosts.printer.mac = "00:00:5e:00:53:02";
     });
     expected = true;
   };
@@ -312,14 +370,14 @@ in
   testMacOnTwoHostsFails = {
     expr = fails "claimed by more than one host" {
       hodon.hosts.intruder.interfaces.main.macAddresses = [
-        "b8:ca:3a:77:a9:2a"
+        "00:00:5e:00:53:01"
       ];
     };
     expected = true;
   };
   testMacOnTwoInterfacesOfOneHostPasses = {
     expr = failuresOf {
-      hodon.hosts.silicon.interfaces.vpn.macAddresses = [ "b8:ca:3a:77:a9:2a" ];
+      hodon.hosts.balcony.interfaces.vpn.macAddresses = [ "00:00:5e:00:53:01" ];
     };
     expected = [ ];
   };
@@ -377,5 +435,64 @@ in
       hodon.hosts.printer.interfaces.lab = { };
     });
     expected = 3;
+  };
+  testLeasesDefaultToTheUpperHalf = {
+    expr = (facts { }).hodon.networks.main.ipv4.leases;
+    expected = {
+      from = "10.10.0.128";
+      to = "10.10.0.254";
+    };
+  };
+  testATinyNetworkHandsOutNoLeases = {
+    expr =
+      (facts { hodon.networks.link.ipv4.cidr = "10.10.1.0/31"; })
+      .hodon.networks.link.ipv4.leases;
+    expected = null;
+  };
+  testAGatewayOutsideItsNetworkFails = {
+    expr =
+      fails
+        "hodon.networks.main.ipv4.gateway is 10.20.0.1, which is not a host address in 10.10.0.0/24"
+        { hodon.networks.main.ipv4.gateway = lib.mkForce "10.20.0.1"; };
+    expected = true;
+  };
+  testAGatewayInsideTheLeasesFails = {
+    expr =
+      fails
+        "hodon.networks.main.ipv4.gateway is 10.10.0.200, which is inside its leases"
+        { hodon.networks.main.ipv4.gateway = lib.mkForce "10.10.0.200"; };
+    expected = true;
+  };
+  testLeasesOutsideTheNetworkFail = {
+    expr =
+      fails
+        "hodon.networks.main.ipv4.leases runs from 10.10.0.200 to 10.10.1.5, which is not a range of host addresses in 10.10.0.0/24"
+        {
+          hodon.networks.main.ipv4.leases = {
+            from = "10.10.0.200";
+            to = "10.10.1.5";
+          };
+        };
+    expected = true;
+  };
+  testBackwardLeasesFail = {
+    expr = fails "which is not a range of host addresses" {
+      hodon.networks.main.ipv4.leases = {
+        from = "10.10.0.200";
+        to = "10.10.0.150";
+      };
+    };
+    expected = true;
+  };
+  testAFixedAddressInsideTheLeasesFails = {
+    expr =
+      fails
+        "hodon.hosts.printer.interfaces.main.ipv4.address is 10.10.0.130, which is inside the leases of hodon.networks.main"
+        { hodon.hosts.printer.interfaces.main.ipv4.address = "10.10.0.130"; };
+    expected = true;
+  };
+  testAHostIsOnTheDefaultProfile = {
+    expr = (facts { }).hodon.hosts.printer.blockProfiles;
+    expected = [ "default" ];
   };
 }
