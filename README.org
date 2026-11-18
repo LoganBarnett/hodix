@@ -7,371 +7,276 @@
 #+tags:
 
 hodix is a set of Nix modules and configurations for running a self-contained IT
-center.  It is meant for a household or a small business.
+center, or a hodon in project terms.  It is meant for a household or a small
+business.
 
-The name is short for hodos-nix.  "Hodos" is the Greek root for a way or a road.
+* Hodons
 
-* Vocabulary
+A hodon is a network built from hodix.  A hodon manages your local network.
+They give you a sort of personal cloud suite.
 
-- hodon :: A network that runs hodix.  Every hodon has a name.  One example is
-  ~proton~.
-- hodocule :: A network of hodons.  The [[*Roadmap][Roadmap]] says how hodons will join one.
-- federated hodon :: A hodon in the same hodocule.  Both owners agree to it and
-  both networks take part.
-- visited hodon :: A venue one device uses while standing on it.  Home takes no
-  part.
-- hostname convention :: A themed pool of host names for a hodon to draw from.
-  Nobody has to invent memorable names.  The periodic table is one convention.
-  Kinds of wood, petaled flowers, and beans are others.
+* User Benefits
 
-* Layout
+A hodon provides benefits depending on your use case.  Here are a few.
 
-Directory names say what a file is and where it works.
+** Households
 
-A directory of modules declares options.  Importing a module changes nothing
-until its options are set.
+There's no EULA here where you give up all rights to your photos so they can be
+used for AI training.  Don't subscribe to platforms that can yank or alter
+features at any time.  Don't place your data on platforms that go out of
+business, or delete your data because of a lapsed payment.
 
-A directory of profiles holds inert fragments.  A profile has no ~options~ or
-~config~ attributes.  Importing a profile is what activates it.  nixpkgs uses
-the same word for the predefined configurations under its ~profiles~ directory.
+** Home Labs
 
-The prefix names the platform.  It is ~nixos~, ~darwin~, or ~home~ for Home
-Manager.  The ~system~ prefix means the file works on NixOS and nix-darwin but
-not Home Manager.  The ~agnostic~ prefix means the file works on all three.
+Don't maintain a home laboratory where you implement some pet feature and burn
+out on the rest.  Build a hodon and use it to springboard your k8s cluster you
+wanted to play around with.  Enjoy not having to set up things like SSO, or
+having to spend a week or two every year updating the software.
 
-* Facts
+** Small Businesses
 
-Facts are declared data about a hodon.  Other modules read them.  Facts set
-almost nothing on a host themselves.
+Enjoy the kind of configurations that the big businesses get, without needing to
+fund an IT department.
 
-The facts are options under ~hodon~.  [[file:agnostic-modules/facts.nix]] declares
-them.  Each option carries its own description.
+* Somewhat Quick Start
 
-** Declaring a hodon
+You will need:
 
-A hodon's facts are an ordinary module.
+1. [[https://nixos.org/download][Nix installed]] on the workstation that will run this setup.
+2. A machine you can dedicate as the primary server host for this hodon.  The
+   machine will be repartitioned, and thus lose all data.
+3. Removable + bootable media such as a USB thumb drive.
+4. ~git~, if somehow your OS doesn't stock it.
 
-#+begin_src nix :exports code
-  {
-    hodon = {
-      name = "proton";
-      networks.main = {
-        vlanId = 10;
-        ipv4.cidr = "10.10.0.0/24";
-      };
-      hosts.silicon = {
-        system = "x86_64-linux";
-        interfaces.main = {
-          ipv4.address = "10.10.0.9";
-          macAddresses = [ "b8:ca:3a:77:a9:2a" ];
-        };
-      };
-    };
-  }
+Emit a Flake from our template. ~<dir>~ is the directory of the git repository /
+Flake that will be created:
+
+#+begin_src sh :results none :exports code
+mkdir <dir> && cd <dir>
+git init
+nix flake init --template github:LoganBarnett/hodix
+git add --all
 #+end_src
 
-An interface's name is a label and not the operating system's device name.  It
-names the network the interface attaches to, so ~interfaces.main~ is the host's
-attachment to ~networks.main~.  Set ~network~ on the interface when the two
-names must differ.
+Edit the ~facts.nix~ file to conform to your network, and name it.  We use
+~home~ as our example hodon name, and ~balcony~ as the primary host's name.  We
+highly recommend you use a different set of names.  See $path for example naming
+patterns for the hodon itself and a series of suggestions for hostnames.
 
-** Using the facts
+You need to setup a host and a user.  The user being you, the administrator of
+this hodon.  You can add other administrators later, or hand over the capability
+to others easily.
 
-A flake needs the facts before any host exists.  Which hosts to build is itself
-a fact.  And the facts themselves don't belong to any one host.  ~lib.mkHodon~
-fills that gap.  It is called once per flake, never inside a host.
+After editing the facts, we have this:
 
-It evaluates the facts outside any host and returns three attributes:
-
-1. ~hodon~ is the validated facts.  Reading it fails if any defect exists, and
-   the failure lists every defect.  The flake enumerates hosts from it.
-2. ~module~ carries the same definitions into a host.  Import it into every host
-   so the facts appear there as ~config.hodon~.
-3. ~forHost~ is ~module~ plus the identity of one host.  A host cannot tell
-   which ~hodon.hosts~ entry is its own, so ~forHost "silicon"~ sets
-   ~hodix.hostName~ for it.
-
-#+begin_src nix :exports code
-let
-  hodonFacts = hodix.lib.mkHodon { modules = [ ./hodon.nix ]; };
-  hostsOn =
-    suffix:
-    lib.filterAttrs (
-      _: host: host.system != null && lib.hasSuffix suffix host.system
-    ) hodonFacts.hodon.hosts;
-in
-{
-  nixosConfigurations = lib.mapAttrs (
-    name: _:
-    nixpkgs.lib.nixosSystem {
-      modules = [
-        hodix.nixosModules.host
-        (hodonFacts.forHost name)
-        ./hosts/${name}.nix
-      ];
-    }
-  ) (hostsOn "-linux");
-  darwinConfigurations = lib.mapAttrs (
-    name: _:
-    nix-darwin.lib.darwinSystem {
-      modules = [
-        hodix.darwinModules.host
-        (hodonFacts.forHost name)
-        ./hosts/${name}.nix
-      ];
-    }
-  ) (hostsOn "-darwin");
-}
-#+end_src
-
-Inside a host, ~config.hodix.host~ is that host's own facts, so
-~config.hodix.host.fqdn~ is ~silicon.proton.hodon.internal~ on silicon.  The
-whole hodon is still there as ~config.hodon~.
-
-~hodix.nixosModules.host~ and ~hodix.darwinModules.host~ apply the host's facts
-to NixOS and nix-darwin.  Each sets ~networking.hostName~, ~networking.domain~,
-and ~nixpkgs.hostPlatform~ as defaults, so a host can still override them.
-
-Export ~hodonFacts.hodon~ as a flake output and scripts can read the same facts
-with ~nix eval~.
-
-** Internal domain
-
-Every hodon uses the domain ~<name>.hodon.internal~.  The domain is derived from
-the name and cannot be set.  Federation depends on every hodon sharing the
-suffix.
-
-** Hostname conventions
-
-Importing a convention's profile selects it.
-
-#+begin_src nix :exports code
-{
-  imports = [ hodix.agnosticProfiles.hostname-convention-wood ];
-}
-#+end_src
-
-~hodon.hostnames.available~ then lists the names no host has taken.  Names are
-handed out in pool order.  A pool lists its shortest names first and breaks ties
-alphabetically, unless its theme carries an order of its own.  The periodic
-table follows atomic number.
-
-A convention is offered and not enforced.  Devices the hodon does not build keep
-whatever names they have.
-
-A hodon's own name sits one level beneath its convention.  It names something
-the pool entries have in common and is never a pool entry itself, so no host can
-take it.  Each convention suggests one.
-
-1. ~periodic-table~ suggests ~proton~.  Every element is made of them.
-2. ~wood~ suggests ~heartwood~.  A trunk has it at the core.
-3. ~petal~ suggests ~nectar~.  Flowers offer it to their visitors.
-4. ~bean~ suggests ~pod~.  Beans grow in one, and the hosts are the beans.
-
-A custom convention sets ~hodon.hostnames.convention~ and ~hodon.hostnames.pool~
-directly.
-
-** Users and groups
-
-Users name their groups, and a group names the groups it belongs to.  A group's
-~members~ is derived from both, so membership has one source.
-[[file:agnostic-modules/identity.nix]] declares these options.
-
-#+begin_src nix :exports code
-  {
-    hodon = {
-      users.ada = {
-        fullName = "Ada Lovelace";
-        groups = [
-          "family"
-          "nextcloud-admins"
-        ];
-      };
-      groups = {
-        family = { };
-        nextcloud-admins.groups = [ "nextcloud-users" ];
-        nextcloud-users = { };
-      };
-    };
-  }
-#+end_src
-
-Here ~nextcloud-users.members~ holds ~ada~ through ~nextcloud-admins~.  Roles
-build this way.  An admin group belongs to its user group, and nobody is listed
-twice.
-
-A group exists once it is declared under ~hodon.groups~.  Naming any other group
-is a defect, so a typo fails at eval and not at login.  A group that leads back
-to itself is a defect too.  Each group maps one to one onto a directory group
-with ~members~ already flattened, so a directory that cannot nest groups loses
-nothing.
-
-** Hodocule
-
-A hodon's facts hold its own view of the hodocule.  There is no central record.
-Federation is pairwise and not transitive, so the hodocule is the set of peers
-the hodon has shaken hands with.  [[file:agnostic-modules/hodocule.nix]] declares
-these options.
-
-A hodon publishes a card.  The card is the module a peer imports to add the
-hodon to its hodocule, and it carries only what the hodon chose to publish.
-
-#+begin_src nix :exports code
+#+begin_src nix :results none :exports code
+# The hodon.  Everything hodix runs is derived from this file.
 {
   hodon = {
-    name = "proton";
-    rootCertificate = builtins.readFile ./pki/root.pem;
-    wireguard = {
-      publicKey = "...";
-      endpoint = "vpn.example.net:51820";
+    name = "home";
+    defaultHost = "balcony";
+    networks.main.ipv4 = {
+      cidr = "10.10.0.0/24";
+      # The router.
+      gateway = "10.10.0.1";
     };
-    groups = {
-      nextcloud-users = { };
-      family.exported = true;
+    hosts.balcony = {
+      system = "x86_64-linux";
+      interfaces.main = {
+        ipv4.address = "10.10.0.9";
+        # The machine's hardware address.  Use `ip link` to see it.
+        macAddresses = [ "00:00:5e:00:53:01" ];
+      };
+    };
+    users.ada = {
+      fullName = "Ada Lovelace";
+      groups = [ "family" ];
+    };
+    groups.family = { };
+  };
+  hodix = {
+    tls.root.subject = {
+      country = "US";
+      state = "Oregon";
+      location = "Portland";
     };
   };
 }
 #+end_src
 
-~hodix.lib.cardText hodonFacts.hodon~ renders the card as Nix source.  Export it
-as a flake output and ~nix eval --raw~ writes the file to hand over.
+We also have a ~hosts/balcony.nix~ file in our new repository.  In there, we
+need to setup hardware profiles from ~nixos-generate-config~ and a ~disko~
+partition table, and perform the NixOS installation itself.  This will get you
+an image:
 
-The peer imports that file and the hodon appears under its
-~hodon.hodocule.peers~.  Each entry is the peer's card plus what this hodon
-decides about it.  Nothing is decided yet.  Grants will land here once identity
-federation is designed.
-
-1. ~rootCertificate~ is PEM text and not a path.  A card crosses repositories as
-   one file.
-2. ~wireguard.endpoint~ may be null on one side of a pair.  Both null is a
-   defect, since neither side could open the link.
-3. ~groups~ names the groups the peer attests membership for.  A grant by group
-   may name only these.  On the home side, ~exported~ marks a group for the
-   card.
-4. ~hodon.hodocule.domains~ is the hodon's domain and every peer's.  A roaming
-   device routes exactly these through its tunnel home.
-
-** Validation
-
-Invalid facts fail evaluation.  Option types reject malformed values.
-
-Some defects span several facts.  Two hosts claiming one address is an example.
-These are collected and reported together.  ~lib.mkHodon~ throws them.  Inside a
-host they are assertions.
-
-* Secrets
-
-hodix keeps secrets with agenix and agenix-rekey.  A secret is encrypted to the
-hodon's master identity and rekeyed to the SSH host key of each host that uses
-it.  The generators from [[https://github.com/LoganBarnett/agenix-rekey-generators][agenix-rekey-generators]] create what can be created, so
-a password or a key pair is declared and never typed.
-
-The hodon declares three things.  [[file:agnostic-modules/secrets.nix]] holds the
-first two and [[file:agnostic-modules/facts.nix]] the third.
-
-1. ~hodix.secrets.directory~ is the directory of the repository that holds them.
-   A hand-written secret is ~<name>.age~ inside it.  Generated secrets go under
-   ~generated~ and each host's rekeyed copies under ~rekeyed/<host>~.
-2. ~hodix.secrets.masterIdentities~ names the age identities that can open every
-   secret.
-3. ~hodon.hosts.<name>.sshHostKey~ is the host's ed25519 SSH host public key.
-   Secrets for the host are encrypted to it, so a host without one can hold
-   none.
-
-#+begin_src nix :exports code
-{
-  hodix.secrets = {
-    directory = ./secrets;
-    masterIdentities = [
-      {
-        identity = ./secrets/master.age;
-        pubkey = ./secrets/master.pub;
-      }
-    ];
-  };
-  hodon.hosts.silicon.sshHostKey = "ssh-ed25519 AAAA... root@silicon";
-}
+#+begin_src sh :results none :exports code
+curl --location --output nixos-minimal.iso \
+  https://channels.nixos.org/nixos-26.05/latest-nixos-minimal-x86_64-linux.iso
 #+end_src
 
-Hosts import ~hodix.nixosModules.secrets~ or ~hodix.darwinModules.secrets~.
-[[file:system-modules/secrets.nix]] turns the settings above into agenix-rekey
-configuration for the host.
+Assuming a USB thumb drive, flash the image thusly in Linux:
 
-The flake hands agenix-rekey the configurations so its commands can find every
-secret, and the development shell carries the ~agenix~ command.
-
-#+begin_src nix :exports code
-{
-  agenix-rekey = hodix.inputs.agenix-rekey.configure {
-    userFlake = self;
-    nixosConfigurations = self.nixosConfigurations;
-    darwinConfigurations = self.darwinConfigurations or { };
-  };
-  devShells.default = pkgs.mkShell {
-    packages = [ hodix.inputs.agenix-rekey.packages.${system}.default ];
-  };
-}
+#+begin_src sh :results none :exports code
+# lsblk shows which /dev/sdX is the thumb drive.
+sudo dd if=nixos-minimal.iso of=/dev/sdX bs=4M status=progress conv=fsync
 #+end_src
 
-~agenix generate~ creates every generated secret and ~agenix rekey~ encrypts
-each secret to the hosts that use it.  With ~ADD_TO_GIT=true~ in the
-environment, ~agenix generate~ also adds to git the files a generator writes
-beside a secret, such as a certificate.
+Or on macOS:
 
-* TLS
-
-Every hodon has a root certificate.  Its services present certificates signed by
-it, and every host trusts it.  The root is constrained to ~hodon.domain~, so a
-stolen root key mints nothing outside the hodon.  [[file:agnostic-modules/tls.nix]]
-declares the root's settings and [[file:system-modules/tls.nix]] issues and trusts.
-
-Hosts import ~hodix.nixosModules.tls~ or ~hodix.darwinModules.tls~.  It brings
-the secrets module with it.  The hodon sets the root's subject once.  The
-organization defaults to the hodon's name.
-
-#+begin_src nix :exports code
-{
-  hodix.tls.subject = {
-    country = "US";
-    state = "Oregon";
-    locality = "Portland";
-  };
-}
+#+begin_src sh :results none :exports code
+# diskutil list shows which /dev/diskN is the thumb drive.
+diskutil unmountDisk /dev/diskN
+sudo dd if=nixos-minimal.iso of=/dev/rdiskN bs=4m
+diskutil eject /dev/diskN
 #+end_src
 
-The root is the generated secret ~root-ca~, so ~agenix generate~ writes its
-certificate to ~generated/root-ca.crt~ under the secrets directory.  Its key
-never leaves the repository.  Once that file exists, ~hodon.rootCertificate~
-defaults to it, so the card and every host's trust store carry the same root.
+Connect the thumb drive to your main machine, and boot it.  Keep in mind that
+the next steps will irreversibly destroy all data on this machine.  Backup
+anything you want to keep before proceeding.
 
-A service declares the certificate it presents.
+The NixOS installer should boot.  From there you will be presented with a user
+and a password.  These are temporary values.  Once those are setup, return to
+your workstation and run this get the hardware profiles for your main host:
 
-#+begin_src nix :exports code
-{
-  hodix.tls.certificates."ldap.proton.hodon.internal" = { };
-}
+#+begin_src sh :results none :exports code
+
 #+end_src
 
-The name must be under ~hodon.domain~.  The key is generated as a secret of the
-host and the certificate is written beside it.  Certificates are short-lived, 47
-days by the generator's default.  ~hodix.tls.certificateValidityDays~ changes
-that for the hodon and a certificate's own ~validityDays~ for itself.
-~config.hodix.tls.certificates.<name>~ then carries ~keyFile~, the key's path on
-the host, and ~certificateFile~, the certificate in the repository.  Root alone
-can read the key, so a service on NixOS reads it through ~LoadCredential~.
+Now we install NixOS on the host itself, using our declaration we've setup.
+This will require the password you stood up earlier.
 
-* Roadmap
+#+begin_src sh :results none :exports code
+nix develop
+hodix-install balcony nixos@<ip>
+#+end_src
 
-[[file:docs/roadmap.org]] describes federation.  It covers how two hodons will form
-a hodocule and reach each other's services without trusting new certificates.
-The facts for it exist.  The link and the bridge do not.  It ends with the order
-the first hodocule gets built in.
+Next, reconfigure your router to cease DNS and DHCP.  How this is specifically
+done is not covered in this guide.
 
-* Contributing
+Boot the main machine.  Once it is fully booted, reconnect to the network to get
+your new DHCP lease from the server that now operates your network.
 
-[[file:CONTRIBUTING.org]] sets the bar for a change.  hodix is both a product and an
-API, so the bar is high.
+Trust the TLS certificate in your flake for your workstation.
 
-* License
+Browse to ~https://nextcloud.home.hodon.internal~, substituting ~home~ for your
+hodon's name.
 
-hodix is licensed under AGPL-3.0-or-later.  [[file:LICENSE]] holds the full text.
+To test that it all works, login with the user you defined in ~facts.nix~.  You
+can use the following to get the initial password of your user:
+
+#+begin_src sh :results none :exports code
+agenix view secrets/generated/ada-ldap-password.age
+#+end_src
+
+Once you have logged in successfully, you have demonstrated full functionality.
+
+* Principles
+
+By creating a hodon you will be standing on these principles:
+
++ Privacy :: Everything is encrypted.  Your local network traffic, your traffic
+  to other hodons, your backups.
++ Resilience :: Your data is completely backed up, incrementally.  Nobody can
+  take away your data.
++ Control :: All of the hodix code is open source, and it is designed with
+  extension and configuration in mind.
++ Reproducible :: Configurations do not expire with age.  Packages are kept
+  locally.  You can always rebuild from scratch without it also needing to be an
+  upgrade project.
++ Federated :: Connect your network with others of its kind, peer to peer, one
+  at a time.  Grant explicit access, and take it away with zero notice.
+
+
+* Free Features
+
+A hodon enjoys all of these features with minimal effort on your part.
+
+** SSO
+
+Single Sign-On is the capability to have a single account that can log in
+anywhere.  A more powerful version of that is having a single-session that spans
+multiple applications.  Hodix supports both where the applications involved
+support it.
+
+The authority is an LDAP directory using OpenLDAP.  OIDC SSO is handled via
+Authelia so the LDAP directory remains the system of record.
+
+** RBAC
+
+Role Based Access Control places permissions into a grouping called a role, and
+users are assigned roles.  This decouples users from the systems they want to
+consume in a way that is easy for administrators to reason about who has
+permissions to what.
+
+For example: Imagine Alice and Bob are users on your hodon.  You want Alice to
+be able to use the 3D printer on the hodon, but Bob can only look.  The 3D
+printer server (typically OctoPrint) can have a ~3d-printers-viewers~,
+~3d-printers-operators~, and ~3d-printers-administrators~ groups it looks for to
+allow various permissions.  You give Alice the operators group, Bob the viewers
+group, and yourself the administrators group.  Some applications allow for very
+fine grained permissions.  You can bundle them together into a group by having
+groups be members of groups.  So in our 3D printer example,
+~3d-printers-operators~ could be a member of ~3d-printers-viewers~ so it gets
+all of the viewing permissions, and also it is a member of
+~3d-printers-operations-print-start~, ~3d-printers-operations-print-stop~, and
+~3d-printers-operations-print-pause~ to allow printing operations.
+
+Hodix supports RBAC via group nesting in LDAP.  See [[*SSO][SSO]] for how that LDAP
+extends into OIDC and other modern authentication concepts.
+
+** Backups
+
+Local backups are made daily and incrementally.  Incremental backups save
+enormous amounts of space by only recording what changed between backups.
+
+Take a situation where you have a lot of photos, but you want to scrub the
+location data from them.  They've been backed up already.  After you do the
+scrub, a normal backup system would have to hold onto both the original copies
+of the photos and the scrubbed copies.  So effectively, you would have the
+photos stored twice.  With incremental backups, the system only records that the
+new photo is different from the old photo in that the new photo has some data
+removed.
+
+Hodix uses Restic to handle backups.  Backups are encrypted "at rest", meaning
+the backups are inaccessible to anyone who doesn't hold the key to the backups.
+
+
+** Personal Cloud
+
+Sync, share, search, and catalog files.  This includes photos, which get
+automatically cataloged by locally run machine learning.  Use a personal or
+shared calendar with your favorite calendar tool.  Automatically sync your
+photos and notes over your smart phone.
+
+This personal cloud work is made possible via Nextcloud.
+
+** VPN
+
+Make sure you can always access your files, calendars, and email with a VPN
+straight to your home.  Side step annoying roaming issues with licensing and
+tailored views by tunneling from another region to your household.
+
+VPN is managed via WireGuard.
+
+** NFS
+
+If your main physical machine cannot connect directly to your television, setup
+a new host in the hodon and have it gain access to your media via NFS.
+
+NFS is authenticated and encrypted via local WireGuard configurations that are
+automatically created when a consumer uses the NFS share.
+
+** Encrypted Traffic
+
+# Implement: We don't have rotation done yet.  We need an automatic query of
+# facts, editing of facts, and deployment to handle this.
+All local traffic is done via encryption.  Do a one-time trust per device.  TLS
+certificate rotation is done automatically.
+
+** Federated Hodons
+
+Peer to peer connections to other hodons allows selective access between the two
+hodons.  The connection requires both hodon administrators to agree to the
+connection, and can be revoked at any time by either party.  Users from the
+remote hodon can be given fine grained permissions in the local hodon as if they
+were local users.

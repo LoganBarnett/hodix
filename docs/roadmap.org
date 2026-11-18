@@ -60,16 +60,18 @@ Each hodon's root certificate covers every name under ~hodon.internal~.  It is
 not limited to the hodon's own domain.  Each hodon also runs an nginx instance.
 That instance translates TLS with its twin on the other hodon.
 
-Take a client on ~proton~ that wants ~nextcloud.heartwood.hodon.internal~.  The
-hodon ~heartwood~ is federated with ~proton~.
+Take a client on ~home~ that wants ~nextcloud.school.hodon.internal~.  The hodon
+~school~ is federated with ~home~.
 
-1. The client's DNS resolves the name to the nginx instance on ~proton~.
-2. That nginx answers under the root certificate of ~proton~.  Every client
-   device on ~proton~ already trusts it.
-3. It re-encrypts the request under the TLS of ~heartwood~.  The request then
+The request's path:
+
+1. The client's DNS resolves the name to the nginx instance on ~home~.
+2. That nginx answers under the root certificate of ~home~.  Every client device
+   on ~home~ already trusts it.
+3. It re-encrypts the request under the TLS of ~school~.  The request then
    crosses the WireGuard interface.
-4. The nginx instance on ~heartwood~ forwards the request to the Nextcloud
-   instance in ~heartwood~.
+4. The nginx instance on ~school~ forwards the request to the Nextcloud instance
+   in ~school~.
 
 ** Roaming
 
@@ -99,28 +101,32 @@ Every hodon service speaks TLS so that failure is the whole story.
 
 * First hodocule
 
-The minimum viable hodocule is two hodons.  One is ~proton~.  The other is a
-household's single machine, ~heartwood~ in the examples here.  Each runs
-Nextcloud.  Users share folders across the pair, and a search for a word finds a
-user's own photos and the photos shared with them, ranked by meaning.
+The minimum viable hodocule is two hodons.  In the examples, the first-person
+one is ~home~.  The third person one is ~school~, on its one machine ~art~.
+Each runs Nextcloud.  Users share folders across the pair, and a search for a
+word finds a user's own photos and the photos shared with them, ranked by
+meaning.
 
 ** Budget
 
-Resident memory is the budget.  The second hodon is one old machine that is, in
-effect, a household's local Internet.  Disk is cheap and a few gigabytes more of
-it is fine.  Every service below is measured on that machine before it lands and
-after, and the number is recorded.
+Resident memory on the second machine bounds the plan.  That machine is one old
+box that is a household's local Internet.  Every item under [[*Order][Order]] is measured on
+it before and after landing, and the number is recorded.  Disk is cheap and a
+few gigabytes more of it is fine.  Photo search is the first item the budget
+shapes.
 
 ** Rules
 
+The second hodon is built under four rules:
+
 1. The machine runs the household's network from the first day.  The router's
-   DMZ points at it, and it serves DHCP and DNS.  NixOS has run ~proton~ this
-   way for over a year, and a second copy is not where the risk is.
+   DMZ points at it, and it serves DHCP and DNS.  NixOS has run ~home~ this way
+   for over a year, and a second copy is not where the risk is.
 2. The link between the hodons is also the only management path to the second
    machine.  It is stood up with both machines on one network, before the second
    one travels.
-3. Every service the machine runs already exists in ~proton~'s configuration.
-   Each one is pulled out into a hodix module that reads the facts, and ~proton~
+3. Every service the machine runs already exists in ~home~'s configuration.
+   Each one is pulled out into a hodix module that reads the facts, and ~home~
    then imports the hodix module in place of its own.  Nothing is written twice
    and nothing is left behind.
 4. Only WireGuard listens on the Internet.  Every other service is reached on
@@ -130,8 +136,10 @@ after, and the number is recorded.
 
 ** Backfill
 
-What moves out of ~proton~'s configuration and into hodix.  Each item is a
-module driven by the facts, with ~proton~ switched over to it as the proof.
+What moves out of ~home~'s configuration and into hodix.
+
+Each item is a module driven by the facts, with ~home~ switched over to it as
+the proof:
 
 1. [ ] Secrets.  agenix-rekey and the generators, driven by the facts.  A host's
        key is a fact and the repository layout is one setting.
@@ -139,8 +147,9 @@ module driven by the facts, with ~proton~ switched over to it as the proof.
        it.
 3. [ ] LDAP from the facts.  ~hodon.users~ and ~hodon.groups~ become the
        directory, with ~members~ already flattened.
-4. [ ] LDAP authentication for services from the facts.  Nextcloud is the first
-       consumer.
+4. [ ] LDAP accounts for services.  A service declares its bind account and its
+       groups in its own file, and the directory host gathers them from every
+       host's configuration.  Nextcloud is the first consumer.
 5. [ ] DHCP from the facts.  A lease per host interface, and the machine handed
        out as the DNS server.
 6. [ ] DNS from the facts.  Every host name, aliases, blocking by profile, the
@@ -159,9 +168,11 @@ module driven by the facts, with ~proton~ switched over to it as the proof.
 
 ** Order
 
+The order the first hodocule is built in:
+
 1. [ ] Services enter the card.  ~hodon.hodocule.peers.<name>.services~ names
        what a peer exports and where.  The bridge forwards exactly these.
-       Nextcloud trusts exactly these.  ~proton~ adopts the hodocule module with
+       Nextcloud trusts exactly these.  ~home~ adopts the hodocule module with
        no other facts, since ~hodon.name~ and the peer's card are enough.
 2. [ ] The link.  WireGuard between the two hodons, derived from the facts.  A
        hodon with no endpoint dials the one that has one.  The deploy tool
@@ -189,6 +200,8 @@ module driven by the facts, with ~proton~ switched over to it as the proof.
 
 ** Checks before building
 
+What to settle before the first machine is touched:
+
 1. Whether the second site has a public address or sits behind carrier NAT.
    This decides which hodon has the endpoint.
 2. That Nextcloud generates previews for federated mounts.  Sightline indexes
@@ -198,6 +211,8 @@ module driven by the facts, with ~proton~ switched over to it as the proof.
 
 ** After
 
+What waits until the proof is done:
+
 1. People names from Immich into the XMP sidecars Immich already writes, and an
    indexer that turns sidecar keywords and people into Nextcloud system tags.
    Both are a second pass over existing photos and nothing in the MVP waits on
@@ -206,7 +221,11 @@ module driven by the facts, with ~proton~ switched over to it as the proof.
 3. The hodons back each other up over the link.
 4. The roaming client module, with the DHCP hint.
 5. Monitoring from the facts.  DHCP, DNS, and WireGuard dashboards already exist
-   in ~proton~'s configuration and follow the same backfill rule.
+   in ~home~'s configuration and follow the same backfill rule.
 6. Guest access.  A person with no hodon is issued a one-off WireGuard profile
    and becomes a device of the hodon with narrow access.  This is the only way
    anything is ever shared outside the hodocule, and nothing new listens for it.
+7. A warnings channel in the facts.  ~hodix.facts.warnings~ sits beside
+   ~failures~ and surfaces through NixOS ~warnings~.  A core service placed off
+   the default host is the first use, if it comes up.  USAGE.org carries the
+   caveat until then.

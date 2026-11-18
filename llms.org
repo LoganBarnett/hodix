@@ -25,6 +25,9 @@ Use ~:exports code~ on a source block that only shows code.
 
 No file lists in documentation.
 
+Nextcloud is the service in an example unless the example needs a capability
+Nextcloud lacks.  Authelia writes passwords, so a password writer is Authelia.
+
 * Prose rules
 
 These apply to comments, option descriptions, org documents, commit bodies, and
@@ -52,6 +55,8 @@ replies.  The reasoning behind each one is in rust-template's
     this list.  Only the rewrite lands.
 14. Lists are numbered whenever the format allows.  A number lets a reader refer
     to an item.
+15. A list or a code block follows a short sentence of its own that ends in a
+    colon.  It says what is listed or what the code covers or achieves.
 
 * Nix
 
@@ -59,6 +64,12 @@ replies.  The reasoning behind each one is in rust-template's
 
 A flake cannot see an untracked file.  Use ~git add --intent-to-add~ on a new
 file.  This leaves an unstaged version to review.
+
+* Tests
+
+Test data sits beside the test that uses it, in the Arrange step.  Shared
+scaffolding is fine.  A separate data file is the last resort.  When a file must
+exist, a comment in that file says why.
 
 * Formatting
 

@@ -14,16 +14,27 @@ change is higher than in a personal configuration.
 Every option, flake output, and importable file path is public API.  Changing
 one breaks other people's hodons.
 
+Every API boundary must observe these qualities:
+
 1. Every option has a type and a description.
 2. A type is as strict as its meaning allows.  A constraint can be relaxed
    later.  It cannot be tightened without breaking someone.
 3. Nothing carries a site, family, or owner name.  Names describe roles.
 
+* Support
+
+The MVP supports one shape.  Every service is on, at ~hodon.defaultHost~, on one
+NixOS machine that is the household's network.  The other states that
+[[file:USAGE.org::*Services][USAGE - Services]] describes are legal and may well work, and they are not
+fielded.  A ticket needs a reproduction in the supported shape, built from the
+template without rearranging the hodon.
+
 * Code
 ** Nix
 *** Modules and profiles
 
-[[file:README.org::*Layout][README - Layout]] describes the split between modules and profiles.
+[[file:docs/codebase.org][docs/codebase.org]] gives the lay of the land.  Its File Layout section describes
+the split between modules and profiles.
 
 *** Initialisms
 
@@ -38,7 +49,9 @@ flake check~.  Checks that reject bad inputs needs a test showing the rejection.
 GitHub runs ~nix flake check~ and ~treefmt --fail-on-change~ on every pull
 request.  Both must pass before a merge into ~main~.  The rule lives in
 ~.github/branch-protection.json~ and is applied by hand, because the token a
-workflow runs with cannot administer branch protection:
+workflow runs with cannot administer branch protection.
+
+The command that applies branch protection:
 
 #+begin_src sh :results none :exports code
 gh api --method PUT repos/LoganBarnett/hodix/branches/main/protection \
@@ -50,3 +63,36 @@ gh api --method PUT repos/LoganBarnett/hodix/branches/main/protection \
 Documents are org-mode files.  Every document is reachable by following links
 from ~README.org~.  Each link carries a one-line summary.  The summary lets a
 reader decide whether to follow the link.
+
+** Vocabulary
+
+Words hodix uses in its own sense:
+
+- hodon :: A network that runs hodix.  Every hodon has a name.  The examples
+  call theirs ~home~.
+- hodocule :: A network of hodons.  The [[*Roadmap][Roadmap]] says how hodons will join one.
+- federated hodon :: A hodon in the same hodocule.  Both owners agree to it and
+  both networks take part.
+- visited hodon :: When taking a roaming device such as a laptop to another
+  network that happens to also be a hodon, that hodon is a visited hodon.
+- hostname convention :: A themed pool of host names for a hodon to draw from.
+  Nobody has to invent memorable names.  The periodic table is one convention.
+  Kinds of wood, petaled flowers, and beans are others.
+
+
+** Examples
+
+Every example in hodix draws on one fictitious set of names:
+
+1. The hodon is ~home~.  Its hosts are places outside a home, since nobody racks
+   a server on a balcony.  ~balcony~ is the server and ~patio~ is the laptop.
+   The ~home~ convention exists so the examples follow a real one, and the
+   Naming section of [[file:USAGE.org]] says why a real hodon should pick another.
+2. People are computer scientists by first name, with initials in order so three
+   parties read like Alice, Bob, and Carol.  ~ada~ is Ada Lovelace, ~barbara~ is
+   Barbara Liskov, ~charles~ is Charles Babbage, ~dennis~ is Dennis Ritchie, and
+   ~edsger~ is Edsger Dijkstra.
+3. ~school~ is the other hodon when an example needs two.  Its hosts are school
+   subjects and ~art~ is its default host.
+4. Nextcloud is the usual service when an example needs one.
+5. MAC addresses come from the block RFC 7042 reserves for documentation.

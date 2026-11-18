@@ -8,3 +8,6 @@
 # Nix leaves symlinks to build results here.
 /result
 /result-*
+
+# The review command records its verdicts here, and they are one person's.
+/review.json*
