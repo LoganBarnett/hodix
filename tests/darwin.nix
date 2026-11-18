@@ -4,17 +4,19 @@
   hodix,
 }:
 let
-  proton = hodix.lib.mkHodon { modules = [ ./proton.nix ]; };
+  home = hodix.lib.mkHodon { modules = [ ./home.nix ]; };
   darwin =
     extra:
     (nix-darwin.lib.darwinSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.darwinModules.host
-        (proton.forHost "scandium")
+        hodix.darwinModules.default
+        ../system-facts/host.nix
+        (home.forHost "patio")
         extra
       ];
     }).config;
-  scandium = darwin { };
+  patio = darwin { };
   failedAssertions =
     configuration:
     map (entry: entry.message) (
@@ -23,12 +25,12 @@ let
 in
 {
   testHostPlatformComesFromFacts = {
-    expr = scandium.nixpkgs.hostPlatform.system;
+    expr = patio.nixpkgs.hostPlatform.system;
     expected = "aarch64-darwin";
   };
   testFqdnMatchesFacts = {
-    expr = scandium.networking.fqdn;
-    expected = scandium.hodix.host.fqdn;
+    expr = patio.networking.fqdn;
+    expected = patio.hodix.host.fqdn;
   };
   testHostNameIsOverridable = {
     expr = (darwin { networking.hostName = "sand"; }).networking.hostName;

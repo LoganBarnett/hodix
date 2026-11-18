@@ -4,32 +4,49 @@
   hodix,
 }:
 let
-  proton = hodix.lib.mkHodon { modules = [ ./proton.nix ]; };
+  home = hodix.lib.mkHodon { modules = [ ./home.nix ]; };
   nixos =
     extra:
     (nixpkgs.lib.nixosSystem {
+      specialArgs = hodix.lib.specialArgs;
       modules = [
-        hodix.nixosModules.host
-        (proton.forHost "silicon")
+        hodix.nixosModules.default
+        ../system-facts/host.nix
+        (home.forHost "balcony")
         { system.stateVersion = "26.05"; }
         extra
       ];
     }).config;
-  silicon = nixos { };
+  balcony = nixos { };
   failedAssertions =
     configuration:
     map (entry: entry.message) (
       lib.filter (entry: !entry.assertion) configuration.assertions
     );
+  rejects = value: !(builtins.tryEval (builtins.deepSeq value value)).success;
 in
 {
+  # The modules read hodix's inputs from the special arguments, and a host
+  # built without them is told so rather than left in an infinite recursion.
+  testAHandBuiltHostNeedsTheSpecialArgs = {
+    expr =
+      rejects
+        (nixpkgs.lib.nixosSystem {
+          modules = [
+            hodix.nixosModules.default
+            hodix.nixosFacts.default
+            (home.forHost "balcony")
+          ];
+        }).config.networking.hostName;
+    expected = true;
+  };
   testHostPlatformComesFromFacts = {
-    expr = silicon.nixpkgs.hostPlatform.system;
+    expr = balcony.nixpkgs.hostPlatform.system;
     expected = "x86_64-linux";
   };
   testFqdnMatchesFacts = {
-    expr = silicon.networking.fqdn;
-    expected = silicon.hodix.host.fqdn;
+    expr = balcony.networking.fqdn;
+    expected = balcony.hodix.host.fqdn;
   };
   testHostNameIsOverridable = {
     expr = (nixos { networking.hostName = "sand"; }).networking.hostName;

@@ -20,6 +20,8 @@ let
 in
 {
   facts = suite "facts" (import ./facts.nix { inherit lib hodix; });
+  services = suite "services" (import ./services.nix { inherit lib hodix; });
+  hodon = suite "hodon" (import ./hodon.nix { inherit lib hodix; });
   hodocule = suite "hodocule" (import ./hodocule.nix { inherit lib hodix; });
   identity = suite "identity" (import ./identity.nix { inherit lib hodix; });
   ipv4 = suite "ipv4" (import ./ipv4.nix { inherit lib; });
@@ -47,4 +49,11 @@ in
         ;
     }
   );
+  ldap = suite "ldap" (import ./ldap.nix { inherit lib nixpkgs hodix; });
+  network = suite "network" (
+    import ./network.nix { inherit lib nixpkgs hodix; }
+  );
+  secret-generation = import ./secret-generation.nix {
+    inherit lib pkgs hodix;
+  };
 }

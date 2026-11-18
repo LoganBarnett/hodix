@@ -5,11 +5,6 @@ let
   host = config.hodix.host;
 in
 {
-  imports = [
-    ../agnostic-modules/facts.nix
-    ../agnostic-modules/host.nix
-  ];
-
   config = {
     networking.hostName = lib.mkDefault host.name;
     networking.domain = lib.mkDefault config.hodon.domain;

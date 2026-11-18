@@ -16,6 +16,17 @@ rec {
       lib.splitString "." address
     );
 
+  fromInt =
+    number:
+    lib.concatMapStringsSep "."
+      (shift: toString (lib.mod (number / pow2 shift) 256))
+      [
+        24
+        16
+        8
+        0
+      ];
+
   # Null means the string is not a network in CIDR notation.  A network with
   # host bits set is rejected so that each network has one spelling.
   parseCidr =
@@ -35,6 +46,18 @@ rec {
       };
 
   overlaps = a: b: a.base < b.base + b.size && b.base < a.base + a.size;
+
+  # The smallest octet-aligned reverse zone that holds the network, so a /25
+  # is answered under its /24's zone.
+  reverseZone =
+    cidr:
+    let
+      parsed = parseCidr cidr;
+      octets = lib.take (parsed.prefixLength / 8) (
+        lib.splitString "." parsed.address
+      );
+    in
+    lib.concatStringsSep "." (lib.reverseList octets ++ [ "in-addr.arpa" ]);
 
   # The first and last addresses of a network are the network and broadcast
   # addresses.  Networks of two addresses or fewer have neither.

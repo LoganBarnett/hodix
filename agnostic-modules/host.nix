@@ -9,9 +9,9 @@ in
   options.hodix = {
     hostName = mkOption {
       type = types.str;
-      example = "silicon";
+      example = "balcony";
       description = ''
-        The `hodon.hosts` entry this configuration builds.
+        The `hodon.hosts` entry this configuration is for.
       '';
     };
     host = mkOption {
@@ -23,7 +23,7 @@ in
         );
       defaultText = lib.literalMD "derived";
       description = ''
-        The facts of the host this configuration builds.
+        The facts of the host this configuration is for.
       '';
     };
   };

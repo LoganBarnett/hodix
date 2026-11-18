@@ -1,7 +1,7 @@
 # Who the hodon knows.  Users name their groups, and a group names the groups
 # it belongs to.  A group's members are derived from both, so membership has
 # one source.  Services and peers read groups and never users.  See the Users
-# and groups section of README.org.
+# and groups section of docs/codebase.org.
 { config, lib, ... }:
 let
   inherit (lib) mkOption types;
@@ -140,9 +140,9 @@ in
         nextcloud-users = { };
       };
       description = ''
-        The hodon's groups.  Each maps one to one onto a directory group with
-        its members flattened, so groups may nest even when the directory
-        cannot.  Names are lower-case DNS labels.
+        The hodon's groups.  Each maps one to one onto an LDAP group with its
+        members flattened, so groups may nest even when LDAP cannot.  Names
+        are lower-case DNS labels.
       '';
     };
   };

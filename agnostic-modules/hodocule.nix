@@ -1,12 +1,13 @@
 # The hodon's view of its hodocule.  Federation is pairwise, so the hodocule is
 # the set of peers this hodon has shaken hands with.  Each peer entry is the
 # card the peer wrote plus what this hodon decides about it.  See the Hodocule
-# section of README.org.
+# section of docs/codebase.org.
 { config, lib, ... }:
 let
   inherit (lib) mkOption types;
   inherit (import ../lib/options.nix { inherit lib; })
     derived
+    internalDomain
     notLabel
     notLabels
     pemCertificate
@@ -36,8 +37,8 @@ let
         };
         domain = derived {
           type = types.str;
-          description = "The peer's internal domain.";
-          value = "${name}.hodon.internal";
+          description = "The peer's internal domain, `<name>.hodon.internal`.";
+          value = "${name}.${internalDomain}";
         };
         rootCertificate = mkOption {
           type = pemCertificate;
